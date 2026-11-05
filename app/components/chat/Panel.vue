@@ -35,13 +35,8 @@ const { messages, uiMessages, status, error, loading, send, stop, retry, reset }
 })
 
 const { data: settings } = useSettings()
-const providerLabel = computed(() => {
-  const p = settings.value?.ai.provider
-  if (p === 'anthropic') return 'Claude'
-  if (p === 'gemini-cli') return settings.value?.capabilities?.geminiEngine?.replace(/ \(.*\)$/, '') || 'Google CLI'
-  return null
-})
-const missingKey = computed(() => settings.value?.ai.provider === 'anthropic' && settings.value?.capabilities?.anthropicConfigured === false)
+const providerLabel = computed(() => (settings.value ? 'Claude' : null))
+const missingKey = computed(() => settings.value?.capabilities?.anthropicConfigured === false)
 
 const byId = computed(() => {
   const map = new Map<string, ChatMessage>()
@@ -159,7 +154,7 @@ function onNewConversation() {
         variant="subtle"
         icon="i-lucide-key-round"
         title="Anthropic API キーが未設定です"
-        description=".env の NUXT_ANTHROPIC_API_KEY を設定するか、設定画面でチャットエンジンを Google CLI（Antigravity / Gemini）に切り替えてください。"
+        description=".env の NUXT_ANTHROPIC_API_KEY を設定してサーバを再起動してください。Gemini はインターネット検索にのみ使われ、チャットの代わりにはなりません。"
       />
 
       <!-- loading -->

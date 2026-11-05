@@ -77,16 +77,3 @@ export function toAnthropicMessages(history: ChatMessage[]): Anthropic.MessagePa
   return out
 }
 
-/** Plain-text transcript (for providers without structured history, e.g. Gemini CLI). */
-export function historyToPlainText(history: ChatMessage[], maxTurns = 10): string {
-  const msgs = history.filter(m => m.role !== 'system').slice(-maxTurns * 2)
-  return msgs.map((m) => {
-    const who = m.role === 'user' ? 'ユーザー' : 'アシスタント'
-    const body = m.parts.map((p) => {
-      if (p.type === 'text') return p.text
-      if (p.type === 'draft') return draftNote(p)
-      return `（ツール ${p.name} を使用）`
-    }).filter(Boolean).join('\n').trim()
-    return body ? `### ${who}\n${body}` : ''
-  }).filter(Boolean).join('\n\n')
-}

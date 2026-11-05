@@ -1,11 +1,10 @@
 import type { ChatMessage, ChatRequest, ChatSession, ChatStreamEvent } from '../../../shared/types/chat'
 import { runAnthropicAgent } from './anthropic'
 import type { AgentRunResult } from './anthropic'
-import { runGeminiChat } from './gemini-cli'
 import { buildSystemPrompt } from './prompt'
 
 export const NO_ANTHROPIC_KEY_MESSAGE
-  = 'Anthropic API キーが設定されていません（.env の NUXT_ANTHROPIC_API_KEY）。設定でチャットエンジンを「Google CLI（Antigravity / Gemini）」に切り替えることもできます。'
+  = 'Anthropic API キーが設定されていません。.env の NUXT_ANTHROPIC_API_KEY（または環境変数 ANTHROPIC_API_KEY）を設定してサーバを再起動してください。'
 
 export interface ChatTurnResult {
   session: ChatSession
@@ -24,7 +23,7 @@ export function anthropicApiKey(): string {
 /** Prepare the session (create / load) and the message ids before any provider work starts. */
 export async function prepareChatTurn(request: ChatRequest): Promise<{ session: ChatSession; userMessage: ChatMessage; assistantId: string }> {
   const settings = await getSettings()
-  if (settings.ai.provider === 'anthropic' && !anthropicApiKey()) {
+  if (!anthropicApiKey()) {
     throw createError({ statusCode: 400, statusMessage: 'Anthropic API key missing', message: NO_ANTHROPIC_KEY_MESSAGE })
   }
   const slug = request.slug ?? null
@@ -48,8 +47,8 @@ export async function prepareChatTurn(request: ChatRequest): Promise<{ session: 
 }
 
 /**
- * Run one chat turn: store the user message, run the configured provider (Anthropic tool loop, or Gemini CLI
- * fallback), store the assistant message and touch the session.
+ * Run one chat turn: store the user message, run the Claude tool-calling loop (Gemini is only reachable through the
+ * web_research tool), store the assistant message and touch the session.
  */
 export async function runChatTurn(
   request: ChatRequest,
@@ -62,31 +61,26 @@ export async function runChatTurn(
   const history = await listChatMessages(session.id)
   await appendChatMessage(session.id, userMessage)
 
+  const apiKey = anthropicApiKey()
+  if (!apiKey) throw createError({ statusCode: 400, message: NO_ANTHROPIC_KEY_MESSAGE })
+  // The in-app assistant must not push to GitHub on its own; syncing is a user action in the sync panel.
+  const bridge = await createMcpBridge({ exclude: ['sync_data'] })
   let result: AgentRunResult
-  if (settings.ai.provider === 'gemini-cli') {
-    const system = buildSystemPrompt({ kind: request.kind, slug: session.slug, draft: request.draft, settings, toolNames: [], noTools: true })
-    result = await runGeminiChat({ history, userMessage: request.message, draft: request.draft, system, onEvent, signal })
-  } else {
-    const apiKey = anthropicApiKey()
-    if (!apiKey) throw createError({ statusCode: 400, message: NO_ANTHROPIC_KEY_MESSAGE })
-    // The in-app assistant must not push to GitHub on its own; syncing is a user action in the sync panel.
-    const bridge = await createMcpBridge({ exclude: ['sync_data'] })
-    try {
-      const toolNames = [...bridge.tools.map(t => t.name), 'update_draft']
-      const system = buildSystemPrompt({ kind: request.kind, slug: session.slug, draft: request.draft, settings, toolNames })
-      result = await runAnthropicAgent({
-        messages: [...history, userMessage],
-        system,
-        bridge,
-        model: settings.ai.anthropicModel,
-        maxTokens: settings.ai.maxTokens,
-        apiKey,
-        onEvent,
-        signal,
-      })
-    } finally {
-      await bridge.close()
-    }
+  try {
+    const toolNames = [...bridge.tools.map(t => t.name), 'update_draft']
+    const system = buildSystemPrompt({ kind: request.kind, slug: session.slug, draft: request.draft, settings, toolNames })
+    result = await runAnthropicAgent({
+      messages: [...history, userMessage],
+      system,
+      bridge,
+      model: settings.ai.anthropicModel,
+      maxTokens: settings.ai.maxTokens,
+      apiKey,
+      onEvent,
+      signal,
+    })
+  } finally {
+    await bridge.close()
   }
 
   const parts = [...result.parts]

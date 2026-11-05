@@ -40,11 +40,6 @@ const argsText = computed({
   set: (v: string) => { state.gemini.args = v.split('\n').map(s => s.trim()).filter(Boolean) },
 })
 
-const providerItems = [
-  { label: 'Anthropic API（Claude）', value: 'anthropic' },
-  { label: 'Google CLI（Antigravity / Gemini、ツール呼び出し無し）', value: 'gemini-cli' },
-]
-
 function validate(s: AppSettings): FormError[] {
   const errors: FormError[] = []
   if (!s.sourcesDir?.trim()) errors.push({ name: 'sourcesDir', message: '一次資料フォルダを入力してください' })
@@ -163,9 +158,7 @@ async function onReindex() {
               </div>
             </template>
             <div class="space-y-4">
-              <UFormField label="チャットエンジン" name="ai.provider" description="API キーは環境変数 ANTHROPIC_API_KEY（または NUXT_ANTHROPIC_API_KEY）で設定します">
-                <USelect v-model="state.ai.provider" :items="providerItems" class="w-full sm:w-72" />
-              </UFormField>
+              <p class="text-sm text-muted">チャット AI は Claude（Anthropic API）です。API キーは環境変数 ANTHROPIC_API_KEY（または NUXT_ANTHROPIC_API_KEY）で設定します。Gemini はインターネット検索（Web 調査ツール）にのみ使われます。</p>
               <div class="grid gap-4 sm:grid-cols-2">
                 <UFormField label="Anthropic モデル" name="ai.anthropicModel" required>
                   <UInput v-model="state.ai.anthropicModel" class="w-full font-mono" placeholder="claude-sonnet-5-5" />

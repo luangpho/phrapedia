@@ -51,8 +51,8 @@
   - このマシンで一度 `agy` を対話起動して **Google アカウントでサインイン** しておく（資格情報は OS のキーリングに保存され再利用されます）
   - サーバ用途: 環境変数 `GEMINI_API_KEY`（[Google AI Studio](https://aistudio.google.com/) で発行）を設定し、`~/.gemini/antigravity-cli/settings.json` に `{"modelProvider": "gemini"}` を書く
   - 旧 **Gemini CLI**（`npm i -g @google/gemini-cli`、有料枠 / API キー利用者向け）を使い続ける場合は 設定 →「CLI」で `Gemini CLI` を選ぶ
-- **Anthropic API キー**（チャット AI に使用）
-  - 無い場合は 設定 →「チャットエンジン」を **Google CLI** に切り替えればチャットも `agy` / `gemini` で動きます（ツール呼び出し無しの単発応答で、一次資料のテキストは自動で同梱されますが画像資料は渡せません。精度は Claude の方が安定します）。
+- **Anthropic API キー**（チャット AI に使用。[Anthropic Console](https://console.anthropic.com/) で発行）
+  - チャット AI は **Claude 固定** です。Gemini（`agy`）はチャットの代わりにはならず、**インターネット検索による情報収集（`web_research` ツール）にだけ** 使われます。
 - Git（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
 
 ## クイックスタート
@@ -100,6 +100,8 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 | 1 | **一次資料**（`sources/` 配下、設定で変更可） | 確定情報。AI は必ず最初に検索・参照する |
 | 2 | **Web 調査**（Antigravity CLI / Gemini CLI） | **未確認**。一次資料に無い部分だけを補う。本文で「未確認」と明記 |
 
+役割分担: **Claude**（チャット AI）が会話・一次資料の読解・下書きの執筆を行い、インターネット検索による情報収集だけを **Gemini**（`web_research` ツール）に委ねます。
+
 レコードの `## 出典` には次のように分けて書きます。
 
 ```markdown
@@ -140,7 +142,6 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 |---|---|---|---|
 | 一次資料フォルダ | `sourcesDir` | `sources` | 絶対パス、またはプロジェクトからの相対パス。`.env`: `NUXT_SOURCES_DIR` |
 | データフォルダ | `dataDir` | `data` | `data/<種類>/<slug>.md` の置き場所。Git 同期するならリポジトリ内に。`.env`: `NUXT_DATA_DIR` |
-| チャットエンジン | `ai.provider` | `anthropic` | `anthropic`（Claude）または `gemini-cli`（設定した Google CLI を使う） |
 | Claude モデル | `ai.anthropicModel` | `claude-sonnet-5-5` | `.env`: `NUXT_ANTHROPIC_MODEL` |
 | 最大トークン | `ai.maxTokens` | `8192` | 1 回の応答の最大出力トークン |
 | 追加の指示 | `ai.extraInstructions` | （空） | システムプロンプト末尾に追加される指示 |
@@ -279,7 +280,7 @@ npm start           # 本番サーバ起動（.env を読み込む）
 | `agy` が終了コード 3 | モデル／エージェント側のエラー、または `--print-timeout` による打ち切り。部分的な応答があればそのまま使われる |
 | 旧 Gemini CLI が認証エラー（終了コード 41） | `GEMINI_API_KEY` を `.env` かシェルに設定するか、ターミナルで一度 `gemini` を起動してログイン |
 | **Web 調査がタイムアウト** | 設定 →「タイムアウト」を延ばす（例: 300000）。モデルを `flash` にすると速くなる。同じ質問はキャッシュされる |
-| **チャットが「API キーが設定されていません」** | `.env` に `NUXT_ANTHROPIC_API_KEY=sk-ant-...` を書いてサーバを再起動。無い場合は チャットエンジンを Google CLI に |
+| **チャットが「API キーが設定されていません」** | `.env` に `NUXT_ANTHROPIC_API_KEY=sk-ant-...` を書いてサーバを再起動（チャットは Claude 専用。Gemini では代替できません） |
 | API キーが無効（401） | キーの値・有効期限・組織の利用制限を確認 |
 | **PGlite のエラー / 起動しない** | `.phrapedia/` は消しても再生成されます（設定・チャット履歴・キャッシュは失われ、レコードと一次資料は無事）。同じ `.phrapedia/` を 2 つのサーバで同時に開くと壊れることがあるので、開発サーバと本番サーバを同時に起動しない（どうしても必要なら `NUXT_STATE_DIR` を分ける） |
 | 一次資料が検索に出ない | パス（設定 → 一次資料フォルダ）を確認。`.` で始まるフォルダは対象外。PDF は本文検索非対応 |

@@ -9,7 +9,6 @@ const SettingsPatch = z.object({
   sourcesDir: nonEmpty.optional(),
   dataDir: nonEmpty.optional(),
   ai: z.object({
-    provider: z.enum(['anthropic', 'gemini-cli']).optional(),
     anthropicModel: nonEmpty.max(100).optional(),
     maxTokens: z.number().int().min(256).max(128_000).optional(),
     extraInstructions: z.string().max(20_000).optional(),

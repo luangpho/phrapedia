@@ -12,7 +12,7 @@
 | アプリ状態 DB | PGlite（埋め込み Postgres, `.phrapedia/pglite/`）— 設定・チャット履歴・一次資料インデックス・Web調査キャッシュ |
 | 一次情報 | `sources/`（設定で変更可）配下の Markdown / 画像。**最優先・確定情報**として扱う |
 | Web 調査 | Google の CLI を `child_process` で呼び出す。既定は **Antigravity CLI**（`agy --output-format json -p ...`。2026-06 に無料枠/Google One の Gemini CLI を置き換え）、旧 **Gemini CLI**（`gemini`、プロンプトは stdin）も選択可。結果は常に「未確認」扱い |
-| チャット AI | Anthropic Claude（ツール呼び出しループ, SSE ストリーミング）。API キーが無い場合は上記 Google CLI をチャットエンジンとして使うフォールバック（ツール呼び出し無し） |
+| チャット AI | Anthropic Claude 固定（ツール呼び出しループ, SSE ストリーミング）。Gemini は `web_research` ツール経由のインターネット検索にのみ関与し、チャット自体は担わない |
 | 同期 | `simple-git` で `data/` をコミット → `pull --rebase` → `push`（GitHub） |
 
 ## ディレクトリ
@@ -103,7 +103,7 @@ updated_at: 2026-11-05T00:00:00.000Z
    Web 由来は「未確認」と明記 → 出典セクションに一次資料パスと URL を分けて書く → 高僧の追加では高僧中心、寺院の追加では寺院中心。
 4. ストリーミングは h3 `createEventStream(event)` の SSE。イベント型は `shared/types/chat.ts` の `ChatStreamEvent`。
 5. 履歴は PGlite（chat_sessions / chat_messages）に保存（`server/utils/chat-store.ts`: createChatSession / listChatSessions / appendChatMessage ...）。セッションは (kind, slug) に紐づき、slug が null の下書きセッションはブラウザの localStorage で記憶され、保存後に PATCH で slug へ付け替えられる。
-6. プロバイダが `gemini-cli` の場合はツール呼び出し無しの単発プロンプト（一次資料の自動検索結果＋履歴＋現在の下書きを同梱）で、回答末尾の ```markdown:draft フェンスを下書きとして取り出す。
+6. 役割分担: Claude が会話・一次資料の読解・下書きの執筆を担い、Web からの情報収集だけを `web_research`（Gemini）に委ねる。Gemini の出力は検索結果の要約＋出典 URL で、レコード本文は Claude が書く。
 
 ## MCP クライアントからの利用
 

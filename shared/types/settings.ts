@@ -1,12 +1,10 @@
-export type ChatProvider = 'anthropic' | 'gemini-cli'
-
 export interface AppSettings {
   /** Directory holding primary sources (markdown/images). Absolute, or relative to the project root. */
   sourcesDir: string
   /** Directory holding records (data/<kind>/<slug>.md). Absolute, or relative to the project root. */
   dataDir: string
+  /** Chat assistant — always Anthropic Claude. Gemini is used only by the web_research tool. */
   ai: {
-    provider: ChatProvider
     anthropicModel: string
     maxTokens: number
     /** Extra instructions appended to the system prompt (user-editable) */
@@ -52,7 +50,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sourcesDir: 'sources',
   dataDir: 'data',
   ai: {
-    provider: 'anthropic',
     anthropicModel: 'claude-sonnet-5-5',
     maxTokens: 8192,
     extraInstructions: '',

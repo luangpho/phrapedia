@@ -8,10 +8,8 @@ export interface SystemPromptInput {
   /** Current editor content (full markdown with frontmatter) */
   draft: string
   settings: AppSettings
-  /** Names of the tools available to the model ([] for providers without tool calling) */
+  /** Names of the tools available to the model */
   toolNames: string[]
-  /** true when the provider cannot call tools (Gemini CLI fallback): describes the output protocol instead */
-  noTools?: boolean
 }
 
 const FOCUS: Record<EntityKind, string> = {
@@ -50,7 +48,7 @@ const HEADINGS: Record<EntityKind, string> = {
 
 /** Japanese system prompt for the record-editing assistant. */
 export function buildSystemPrompt(input: SystemPromptInput): string {
-  const { kind, slug, draft, settings, toolNames, noTools } = input
+  const { kind, slug, draft, settings, toolNames } = input
   const label = ENTITY_KIND_LABELS[kind]
   const has = (n: string) => toolNames.includes(n)
 
@@ -65,13 +63,7 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
   sections.push(['## 対象の焦点', FOCUS[kind]].join('\n'))
 
   const hierarchy: string[] = ['## 情報の優先順位（厳守）']
-  if (noTools) {
-    hierarchy.push(
-      '1. 一次資料: 下の「一次資料からの抜粋」は利用者が集めた資料で、最も信頼できる確定情報です。出典には「一次資料: <パス>」と書きます。',
-      '2. Web 検索: 一次資料で足りない部分だけ、Google 検索で補ってください。Web 由来の事実には必ず「（未確認）」と付け、出典に URL を書きます（「Web（未確認）: <URL>」）。',
-      '3. 推測で事実を作らないこと。分からないことは「不明」「要確認」と書きます。一次資料と Web が食い違う場合は一次資料を採用し、相違を注記します。',
-    )
-  } else {
+  {
     hierarchy.push(
       `1. 一次資料（${['search_sources', 'list_sources', 'read_source'].filter(has).join(' / ') || 'search_sources / read_source'}）: 最も信頼できる確定情報です。まず search_sources でタイ語名・ローマ字名・日本語名など複数の表記で検索し、該当ファイルを read_source で読んでください。出典には「一次資料: <パス>」と書きます。`,
       `2. Web 調査（${has('web_research') ? 'web_research — Gemini による Web 検索' : 'web_research'}）: 一次資料で埋まらない部分だけに使います。Web 由来の事実には必ず「（未確認）」と付け、出典に URL を書きます（「Web（未確認）: <URL>」）。`,
@@ -94,20 +86,7 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     '「## 出典」には「- 一次資料: <パス>」と「- Web（未確認）: <URL>」を分けて列挙します。',
   ].join('\n'))
 
-  if (noTools) {
-    sections.push([
-      '## 下書きの更新方法',
-      '現在の下書き（エディタの内容）は下に示します。下書きを変更する場合は、回答の最後に「更新後のレコード全文（frontmatter を含む）」を',
-      '次の形式のコードブロックで 1 つだけ出力してください（開始行は ```markdown:draft、終了行は ``` のみ）:',
-      '```markdown:draft',
-      '---',
-      'kind: ...',
-      '---',
-      '# ...',
-      '```',
-      '変更しない場合はこのブロックを出力しないでください。ファイルの保存はユーザーが「保存」ボタンで行います。',
-    ].join('\n'))
-  } else {
+  {
     sections.push([
       '## 下書き（作業中のレコード）の扱い',
       '- 現在の下書き（ユーザーのエディタの内容）は下に示します。これが作業対象です。',
