@@ -104,6 +104,9 @@ updated_at: 2026-11-05T00:00:00.000Z
 4. ストリーミングは h3 `createEventStream(event)` の SSE。イベント型は `shared/types/chat.ts` の `ChatStreamEvent`。
 5. 履歴は PGlite（chat_sessions / chat_messages）に保存（`server/utils/chat-store.ts`: createChatSession / listChatSessions / appendChatMessage ...）。セッションは (kind, slug) に紐づき、slug が null の下書きセッションはブラウザの localStorage で記憶され、保存後に PATCH で slug へ付け替えられる。
 6. 役割分担: Claude が会話・一次資料の読解・下書きの執筆を担い、Web からの情報収集だけを `web_research`（Gemini）に委ねる。Gemini の出力は検索結果の要約＋出典 URL で、レコード本文は Claude が書く。
+7. 画像を対象にした指示（「この画像の〜」）: Claude は `read_source` で画像を確認して文字を読み取り、`web_research` に `images`（一次資料の画像パス）と `ocrText`（自分の読み取り結果＝参考情報）を渡す。
+   `server/utils/gemini.ts` は画像を実行ごとの作業ディレクトリ（`.phrapedia/gemini-work/run-*`）にコピーし、その中で CLI を起動する（Gemini CLI は `@image-1.jpg` 構文で画像をプロンプトに埋め込み、Antigravity CLI はファイル読み取りツールで開く）。
+   プロンプトは「画像本体を必ず自分で開く／文字を自分で読み取る／完全一致が確証できなければ拡大・部分切り出しで読み直す／候補と確信度を併記／原語の文字列で検索」を必須手順として指示する。キャッシュキーには画像内容のハッシュを含める。
 
 ## MCP クライアントからの利用
 

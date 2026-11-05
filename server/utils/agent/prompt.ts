@@ -69,6 +69,16 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
       `2. Web 調査（${has('web_research') ? 'web_research — Gemini による Web 検索' : 'web_research'}）: 一次資料で埋まらない部分だけに使います。Web 由来の事実には必ず「（未確認）」と付け、出典に URL を書きます（「Web（未確認）: <URL>」）。`,
       '3. 推測で事実を作らないこと。分からないことは「不明」「要確認」と書きます。一次資料と Web が食い違う場合は一次資料を採用し、相違を注記します。',
     )
+    if (has('web_research')) {
+      hierarchy.push(
+        '',
+        '### 画像についての指示の扱い（必須）',
+        'ユーザーの指示が「この画像の〜」「添付の写真の〜」など一次資料の画像を対象にしている場合は、次の手順を必ず守ります。',
+        '- まず list_sources / search_sources で該当画像を特定し、read_source で画像本体を開いて自分で確認する。画像内の文字（タイ語・日本語・英語・数字など）を自分で読み取り、不確かな箇所は候補と確信度を控える。',
+        '- Web 調査が必要なときは web_research に、質問文だけでなく **画像本体のパスを images に、自分が読み取った文字を ocrText に必ず含める**。画像の対象について文字だけで検索してはいけない（画像自体も検索指示に含める）。',
+        '- web_research 側は画像を自分で読み取り直し、完全一致が確証できなければ拡大などで読み直す。その結果（「画像から読み取った文字」節）と自分の読み取りを照合し、食い違いはレコードに「要確認」として残す。',
+      )
+    }
     if (has('list_entities') || has('get_entity')) {
       hierarchy.push('既存レコード（list_entities / get_entity）は関連する高僧・寺院の slug を確認したり、重複を避けたりするのに使えます。')
     }

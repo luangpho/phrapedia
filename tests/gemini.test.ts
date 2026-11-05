@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unwrapGeminiOutput, buildCliInvocation } from '../server/utils/gemini'
+import { unwrapGeminiOutput, buildCliInvocation, buildResearchPrompt } from '../server/utils/gemini'
 
 describe('unwrapGeminiOutput', () => {
   it('unwraps the JSON envelope', () => {
@@ -74,5 +74,24 @@ describe('buildCliInvocation', () => {
     expect(args).toContain('--approval-mode')
     expect(args).toContain('--skip-trust')
     expect(args[args.length - 2]).toBe('-p')
+  })
+})
+
+describe('buildResearchPrompt', () => {
+  it('adds mandatory image-reading instructions and the reference OCR text when images are attached', () => {
+    const p = buildResearchPrompt('この画像のプラクルアンは何か', { images: ['images/amulet.jpg'], ocrText: 'วัดระฆัง 2500' })
+    expect(p).toContain('image-1')
+    expect(p).toContain('images/amulet.jpg')
+    expect(p).toContain('必ず自分で開いて確認')
+    expect(p).toContain('拡大')
+    expect(p).toContain('参考: 事前に読み取られた文字')
+    expect(p).toContain('วัดระฆัง 2500')
+    expect(p).toContain('## 質問')
+  })
+
+  it('omits the image section without images', () => {
+    const p = buildResearchPrompt('ワット・ラカンの創建年', { context: '一次資料: 1782年' })
+    expect(p).not.toContain('画像の取り扱い')
+    expect(p).toContain('既知の情報')
   })
 })
