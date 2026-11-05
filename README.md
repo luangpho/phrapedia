@@ -156,7 +156,7 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 | コマンド | `gemini.command` | `agy` | 実行ファイル名または絶対パス（例: `~/.local/bin/agy`）。`.env`: `NUXT_GEMINI_COMMAND` |
 | 追加引数 | `gemini.args` | `[]` | CLI に渡す追加引数（1 行に 1 つ。例: `--print-timeout`, `--effort`） |
 | モデル | `gemini.model` | （空 = CLI 既定） | agy は `--model`、gemini は `-m` に渡す（例: `flash`, `pro`） |
-| 承認モード | `gemini.approvalMode` | `default` | `default`（検索のみ・推奨）/ `auto_edit`（agy: `--mode accept-edits`、gemini: `--approval-mode auto_edit`）/ `yolo`（agy: `--dangerously-skip-permissions`。シェル等も許可、非推奨） |
+| 承認モード | （固定） | `auto` | agy は `--mode auto`、gemini は `--approval-mode auto_edit` を常に付与。変更したい場合は追加引数で `--mode ...` / `--approval-mode ...` を指定すると上書きされる |
 | タイムアウト | `gemini.timeoutMs` | `180000` | CLI 1 回あたりの上限（ミリ秒）。超過時はプロセスを終了 |
 | キャッシュ時間 | `gemini.cacheHours` | `24` | 同じ調査結果を再利用する時間。`0` で無効 |
 | リモート | `git.remote` | `origin` | push / pull 先のリモート名 |

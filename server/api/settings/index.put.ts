@@ -18,7 +18,6 @@ const SettingsPatch = z.object({
     command: nonEmpty.optional(),
     args: z.array(z.string().max(1000)).max(50).optional(),
     model: z.string().trim().max(100).optional(),
-    approvalMode: z.enum(['default', 'auto_edit', 'yolo']).optional(),
     timeoutMs: z.number().int().min(1000).max(3_600_000).optional(),
     cacheHours: z.number().min(0).max(24 * 365).optional(),
   }).strict().optional(),

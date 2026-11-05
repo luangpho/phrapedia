@@ -18,12 +18,6 @@ watch(view, (v) => {
   loaded.value = true
 }, { immediate: true })
 
-const approvalModeItems = [
-  { label: 'default（検索のみ・推奨）', value: 'default' },
-  { label: 'auto_edit（agy: --mode accept-edits / gemini: web_fetch 許可）', value: 'auto_edit' },
-  { label: 'yolo（全ツール許可・非推奨）', value: 'yolo' },
-]
-
 const engineItems = [
   { label: 'Antigravity CLI（agy）— 推奨', value: 'antigravity' },
   { label: 'Gemini CLI（gemini）— 旧 CLI', value: 'gemini-cli' },
@@ -190,9 +184,7 @@ async function onReindex() {
                   <UInput v-model="state.gemini.model" class="w-full font-mono" placeholder="例: flash" />
                 </UFormField>
               </div>
-              <UFormField label="承認モード" name="gemini.approvalMode" description="ヘッドレス実行時のツール承認。Web 検索は既定で許可。URL 取得など承認が必要なツールを使わせたい場合のみ auto_edit。yolo はシェル等も許可するため非推奨">
-                <USelect v-model="state.gemini.approvalMode" :items="approvalModeItems" class="w-full sm:w-72" />
-              </UFormField>
+              <p class="text-sm text-muted">承認モードは <code class="font-mono text-xs">auto</code> に固定です（agy: <code class="font-mono text-xs">--mode auto</code> / gemini: <code class="font-mono text-xs">--approval-mode auto_edit</code>）。変更が必要な場合のみ追加引数で上書きしてください。</p>
               <UFormField label="追加引数" name="gemini.args" description="1 行に 1 つ">
                 <UTextarea v-model="argsText" :rows="3" autoresize class="w-full" :ui="{ base: 'font-mono text-sm' }" />
               </UFormField>

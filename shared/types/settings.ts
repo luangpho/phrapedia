@@ -23,13 +23,6 @@ export interface AppSettings {
     args: string[]
     /** Model passed with -m (e.g. "flash", "pro", "gemini-2.5-pro"). Empty = CLI default ("auto"). */
     model: string
-    /**
-     * Tool-approval mode for headless runs.
-     * - antigravity: default = no flag, auto_edit = `--mode accept-edits`, yolo = `--dangerously-skip-permissions`
-     * - gemini-cli: passed as `--approval-mode` (google_web_search is always allowed; web_fetch needs auto_edit/yolo)
-     * "yolo" also allows shell/file tools, so prefer default / auto_edit.
-     */
-    approvalMode: 'default' | 'auto_edit' | 'yolo'
     timeoutMs: number
     /** Cache web research results for this many hours (0 = no cache) */
     cacheHours: number
@@ -59,7 +52,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     command: 'agy',
     args: [],
     model: '',
-    approvalMode: 'default',
     timeoutMs: 180_000,
     cacheHours: 24,
   },

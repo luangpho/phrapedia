@@ -58,28 +58,26 @@ function defaultCommand(engine: ResearchEngine): string {
 /**
  * Build the argv for a headless run.
  * - Antigravity CLI (`agy`): the prompt goes in `-p` (agy does not read stdin when -p is given);
- *   `--output-format json`, optional `--model`, `--mode accept-edits` / `--dangerously-skip-permissions`.
+ *   `--output-format json`, optional `--model`, and the approval mode fixed to `--mode auto`.
  * - Gemini CLI (`gemini`): the prompt is sent on stdin and `-p` carries a short trailer;
- *   `--output-format json`, optional `-m`, `--approval-mode`, `--skip-trust`.
+ *   `--output-format json`, optional `-m`, approval mode fixed to `--approval-mode auto_edit` (its "auto"), `--skip-trust`.
+ * The approval mode is always "auto" (not user-configurable); extra args may still override the flag explicitly.
  */
-export function buildCliInvocation(engine: ResearchEngine, opts: { model: string; extraArgs: string[]; approvalMode: string; prompt: string }): { args: string[]; stdin?: string } {
+export function buildCliInvocation(engine: ResearchEngine, opts: { model: string; extraArgs: string[]; prompt: string }): { args: string[]; stdin?: string } {
   const has = (flag: string) => opts.extraArgs.includes(flag)
   const args: string[] = []
   if (engine === 'antigravity') {
     if (opts.model && !has('--model')) args.push('--model', opts.model)
     args.push(...opts.extraArgs)
     if (!has('--output-format')) args.push('--output-format', 'json')
-    if (!has('--mode') && !has('--dangerously-skip-permissions')) {
-      if (opts.approvalMode === 'auto_edit') args.push('--mode', 'accept-edits')
-      else if (opts.approvalMode === 'yolo') args.push('--dangerously-skip-permissions')
-    }
+    if (!has('--mode') && !has('--dangerously-skip-permissions')) args.push('--mode', 'auto')
     args.push('-p', opts.prompt)
     return { args }
   }
   if (opts.model && !has('-m') && !has('--model')) args.push('-m', opts.model)
   args.push(...opts.extraArgs)
   if (!has('--output-format')) args.push('--output-format', 'json')
-  if (!has('--approval-mode') && !has('--yolo') && !has('-y')) args.push('--approval-mode', opts.approvalMode || 'default')
+  if (!has('--approval-mode') && !has('--yolo') && !has('-y')) args.push('--approval-mode', 'auto_edit')
   if (!has('--skip-trust')) args.push('--skip-trust')
   args.push('-p', '上記の指示に従って回答してください。')
   return { args, stdin: opts.prompt }
@@ -128,7 +126,7 @@ export async function runGemini(opts: GeminiRunOptions): Promise<GeminiRunResult
   // Gemini CLI embeds `@file` references (images included) straight into the prompt; Antigravity CLI reads them
   // with its file tool when told to. Both get the explicit file list plus the @ references.
   const prompt = attachments.length ? `${opts.prompt}\n\n添付画像ファイル（作業ディレクトリ直下）: ${attachments.map(a => `@${a.name}`).join(' ')}` : opts.prompt
-  const { args, stdin } = buildCliInvocation(engine, { model, extraArgs: s.gemini.args ?? [], approvalMode: s.gemini.approvalMode || 'default', prompt })
+  const { args, stdin } = buildCliInvocation(engine, { model, extraArgs: s.gemini.args ?? [], prompt })
 
   const started = Date.now()
   let stdout: string, stderr: string, code: number | null
