@@ -73,7 +73,11 @@ async function openDb(): Promise<PGlite> {
   return db
 }
 
-/** Singleton PGlite instance (kept on globalThis so Nitro HMR in dev does not reopen the data dir). */
+/**
+ * Lazily created singleton PGlite instance. Memoised as a Promise so concurrent first requests share one
+ * `PGlite.create()`; cleared on failure so a failed open can be retried. PGlite has no data-directory lock,
+ * so the instance is closed on Nitro's `close` hook (see server/plugins/pglite-close.ts).
+ */
 export function useDb(): Promise<PGlite> {
   const g = globalThis as DbGlobal
   if (!g.__phrapediaDb) {
