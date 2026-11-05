@@ -89,6 +89,7 @@ updated_at: 2026-11-05T00:00:00.000Z
 | POST | `/api/chat` | チャット（SSE: `ChatStreamEvent`） |
 | GET | `/api/chat/sessions?kind=&slug=` | セッション一覧 |
 | GET/DELETE | `/api/chat/sessions/:id` | メッセージ取得 / 削除 |
+| PATCH | `/api/chat/sessions/:id` | `{ slug?, title? }` — 下書き用セッションを保存後のレコードへ紐付け直す |
 | GET | `/api/health` | 動作確認 |
 | POST | `/mcp` | MCP エンドポイント（Streamable HTTP, stateless） |
 
@@ -101,7 +102,8 @@ updated_at: 2026-11-05T00:00:00.000Z
 3. システムプロンプトの原則: 一次資料（search_sources / read_source）を最優先 → 不足分のみ web_research（Gemini）→
    Web 由来は「未確認」と明記 → 出典セクションに一次資料パスと URL を分けて書く → 高僧の追加では高僧中心、寺院の追加では寺院中心。
 4. ストリーミングは h3 `createEventStream(event)` の SSE。イベント型は `shared/types/chat.ts` の `ChatStreamEvent`。
-5. 履歴は PGlite（chat_sessions / chat_messages）に保存。セッションは (kind, slug) に紐づく。
+5. 履歴は PGlite（chat_sessions / chat_messages）に保存（`server/utils/chat-store.ts`: createChatSession / listChatSessions / appendChatMessage ...）。セッションは (kind, slug) に紐づき、slug が null の下書きセッションはブラウザの localStorage で記憶され、保存後に PATCH で slug へ付け替えられる。
+6. プロバイダが `gemini-cli` の場合はツール呼び出し無しの単発プロンプト（一次資料の自動検索結果＋履歴＋現在の下書きを同梱）で、回答末尾の ```markdown:draft フェンスを下書きとして取り出す。
 
 ## MCP クライアントからの利用
 
