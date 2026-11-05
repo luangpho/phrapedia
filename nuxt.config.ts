@@ -27,6 +27,13 @@ export default defineNuxtConfig({
     },
   },
 
+  icon: {
+    // Bundle the whole lucide collection server-side so dynamically named icons never hit the Iconify API
+    // (the app must work offline / behind restrictive proxies).
+    serverBundle: { collections: ['lucide'] },
+    clientBundle: { scan: true, sizeLimitKb: 512 },
+  },
+
   mcp: {
     name: 'Phrapedia',
     version: '0.1.0',

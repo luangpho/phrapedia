@@ -11,7 +11,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
@@ -30,9 +32,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.151",
     "@types/node": "^22.0.0",
     "ai": "^7.0.163",
     "typescript": "^5.9.0",
+    "vitest": "^5.1.0",
     "vue-tsc": "^3.0.0"
   }
 }
