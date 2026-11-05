@@ -3,8 +3,8 @@
 タイの **高僧・寺院・プラクルアン（お守り）** の情報を、AI と一緒に調べて **Markdown ファイル** として蓄積するローカルファースト型の知識ベースです。
 
 - 正本は `data/<種類>/<slug>.md`（YAML frontmatter + Markdown）。Git で履歴管理し、GitHub に同期できます。
-- 手元の **一次資料**（`sources/` のメモ・画像）を最優先し、足りない部分だけを **Gemini CLI による Web 調査** で補います。Web 由来の情報は常に「未確認」として扱います。
-- 同じツール群を **MCP サーバ**（`/mcp`）として公開しているので、Claude Code や Gemini CLI からも読み書きできます。
+- 手元の **一次資料**（`sources/` のメモ・画像）を最優先し、足りない部分だけを **Google の CLI（Antigravity CLI）による Web 調査** で補います。Web 由来の情報は常に「未確認」として扱います。
+- 同じツール群を **MCP サーバ**（`/mcp`）として公開しているので、Claude Code や Antigravity CLI からも読み書きできます。
 
 > 内部構成の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
 
@@ -34,7 +34,7 @@
 | レコード管理 | 高僧・寺院のレコードを一覧・閲覧・編集・削除。Markdown プレビュー付きエディタ |
 | AI チャット | レコードごとのチャット窓。AI が一次資料を検索し、Web 調査で補い、**下書き** をエディタに反映（保存はユーザーが行う） |
 | 一次資料 | 任意フォルダの Markdown / 画像を全文検索（タイ語・日本語・英語の部分一致）・プレビュー |
-| Web 調査 | Gemini CLI（Google 検索グラウンディング）をサーバから実行。結果はキャッシュ |
+| Web 調査 | Antigravity CLI `agy`（Google 検索）をサーバから実行。旧 Gemini CLI も選択可。結果はキャッシュ |
 | Git 同期 | `data/` だけをコミット → `pull --rebase` → `push`。保存ごとの自動コミット／自動プッシュも可 |
 | MCP サーバ | `http://localhost:3000/mcp`（Streamable HTTP）。外部の AI エージェントから同じ操作が可能 |
 | ダークモード | Nuxt UI のカラーモードに対応 |
@@ -42,16 +42,17 @@
 ## 必要なもの
 
 - **Node.js 22 以上**
-- **Gemini CLI**（Web 調査に使用）
+- **Antigravity CLI（`agy`）**（Web 調査に使用。2026 年 6 月に無料枠 / Google One 向けの Gemini CLI を置き換えた Google 公式 CLI）
   ```bash
-  npm i -g @google/gemini-cli
-  gemini --version
+  curl -fsSL https://antigravity.google/cli/install.sh | bash   # ~/.local/bin/agy に入る
+  agy --version
   ```
   認証はどちらか一方:
-  - 環境変数 `GEMINI_API_KEY` を設定する（[Google AI Studio](https://aistudio.google.com/) で発行）
-  - このマシンで一度 `gemini` を対話起動して **Google アカウントで OAuth ログイン** しておく（以後は資格情報が再利用されます）
+  - このマシンで一度 `agy` を対話起動して **Google アカウントでサインイン** しておく（資格情報は OS のキーリングに保存され再利用されます）
+  - サーバ用途: 環境変数 `GEMINI_API_KEY`（[Google AI Studio](https://aistudio.google.com/) で発行）を設定し、`~/.gemini/antigravity-cli/settings.json` に `{"modelProvider": "gemini"}` を書く
+  - 旧 **Gemini CLI**（`npm i -g @google/gemini-cli`、有料枠 / API キー利用者向け）を使い続ける場合は 設定 →「CLI」で `Gemini CLI` を選ぶ
 - **Anthropic API キー**（チャット AI に使用）
-  - 無い場合は 設定 →「チャットエンジン」を **Gemini CLI** に切り替えればチャットも Gemini で動きます（Gemini CLI モードはツール呼び出し無しの単発応答で、一次資料のテキストは自動で同梱されますが画像資料は渡せません。精度は Claude の方が安定します）。
+  - 無い場合は 設定 →「チャットエンジン」を **Google CLI** に切り替えればチャットも `agy` / `gemini` で動きます（ツール呼び出し無しの単発応答で、一次資料のテキストは自動で同梱されますが画像資料は渡せません。精度は Claude の方が安定します）。
 - Git（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
 
 ## クイックスタート
@@ -87,7 +88,7 @@ npm start            # = node --env-file-if-exists=.env .output/server/index.mjs
 
 Phrapedia はログイン機構のない「自分の PC で動かすツール」です。
 
-- 設定画面の値（Gemini CLI のコマンドパス、フォルダなど）はサーバ側でそのまま使われます。**信頼できる人だけが届くネットワーク**で動かしてください（`HOST=127.0.0.1` 推奨）。
+- 設定画面の値（CLI のコマンドパス、フォルダなど）はサーバ側でそのまま使われます。**信頼できる人だけが届くネットワーク**で動かしてください（`HOST=127.0.0.1` 推奨）。
 - ブラウザからの API 呼び出しには同一オリジン・JSON 限定のチェック（CSRF 対策）がかかっています。
 - API キーはブラウザへ渡さず、`.env` / 環境変数のみで扱います。
 - アプリ内のチャット AI には Git 同期ツール（`sync_data`）を渡していません。GitHub への push は常に同期パネルからの操作です（自動プッシュ設定を除く）。
@@ -97,7 +98,7 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 | 優先度 | 情報源 | 扱い |
 |---|---|---|
 | 1 | **一次資料**（`sources/` 配下、設定で変更可） | 確定情報。AI は必ず最初に検索・参照する |
-| 2 | **Web 調査**（Gemini CLI） | **未確認**。一次資料に無い部分だけを補う。本文で「未確認」と明記 |
+| 2 | **Web 調査**（Antigravity CLI / Gemini CLI） | **未確認**。一次資料に無い部分だけを補う。本文で「未確認」と明記 |
 
 レコードの `## 出典` には次のように分けて書きます。
 
@@ -139,15 +140,16 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 |---|---|---|---|
 | 一次資料フォルダ | `sourcesDir` | `sources` | 絶対パス、またはプロジェクトからの相対パス。`.env`: `NUXT_SOURCES_DIR` |
 | データフォルダ | `dataDir` | `data` | `data/<種類>/<slug>.md` の置き場所。Git 同期するならリポジトリ内に。`.env`: `NUXT_DATA_DIR` |
-| チャットエンジン | `ai.provider` | `anthropic` | `anthropic`（Claude）または `gemini-cli` |
+| チャットエンジン | `ai.provider` | `anthropic` | `anthropic`（Claude）または `gemini-cli`（設定した Google CLI を使う） |
 | Claude モデル | `ai.anthropicModel` | `claude-sonnet-5-5` | `.env`: `NUXT_ANTHROPIC_MODEL` |
 | 最大トークン | `ai.maxTokens` | `8192` | 1 回の応答の最大出力トークン |
 | 追加の指示 | `ai.extraInstructions` | （空） | システムプロンプト末尾に追加される指示 |
-| Gemini コマンド | `gemini.command` | `gemini` | 実行ファイル名または絶対パス。`.env`: `NUXT_GEMINI_COMMAND` |
-| 追加引数 | `gemini.args` | `[]` | CLI に渡す追加引数（1 行に 1 つ） |
-| Gemini モデル | `gemini.model` | （空 = CLI 既定） | `-m` に渡す（例: `flash`, `pro`, `gemini-2.5-pro`） |
-| 承認モード | `gemini.approvalMode` | `auto_edit` | `default`（web_fetch 不可）/ `auto_edit`（推奨）/ `yolo`（シェル等も許可、非推奨） |
-| タイムアウト | `gemini.timeoutMs` | `180000` | Gemini CLI 1 回あたりの上限（ミリ秒） |
+| CLI | `gemini.engine` | `antigravity` | `antigravity`（`agy`）または `gemini-cli`（旧 `gemini`）。`.env`: `NUXT_GEMINI_ENGINE` |
+| コマンド | `gemini.command` | `agy` | 実行ファイル名または絶対パス（例: `~/.local/bin/agy`）。`.env`: `NUXT_GEMINI_COMMAND` |
+| 追加引数 | `gemini.args` | `[]` | CLI に渡す追加引数（1 行に 1 つ。例: `--print-timeout`, `--effort`） |
+| モデル | `gemini.model` | （空 = CLI 既定） | agy は `--model`、gemini は `-m` に渡す（例: `flash`, `pro`） |
+| 承認モード | `gemini.approvalMode` | `default` | `default`（検索のみ・推奨）/ `auto_edit`（agy: `--mode accept-edits`、gemini: `--approval-mode auto_edit`）/ `yolo`（agy: `--dangerously-skip-permissions`。シェル等も許可、非推奨） |
+| タイムアウト | `gemini.timeoutMs` | `180000` | CLI 1 回あたりの上限（ミリ秒）。超過時はプロセスを終了 |
 | キャッシュ時間 | `gemini.cacheHours` | `24` | 同じ調査結果を再利用する時間。`0` で無効 |
 | リモート | `git.remote` | `origin` | push / pull 先のリモート名 |
 | ブランチ | `git.branch` | （空 = 現在のブランチ） | 同期するブランチ |
@@ -192,7 +194,7 @@ git checkout render && git merge <作業ブランチ> && git push origin render
 |---|---|
 | ビルド / 起動 | `npm ci && npm run build` / `node scripts/render-start.mjs`（初回起動時に `data/`・`sources/` のサンプルを永続ディスクへコピーしてからサーバを起動） |
 | データの置き場所 | `NUXT_DATA_DIR=/var/data/data`、`NUXT_SOURCES_DIR=/var/data/sources`、`NUXT_STATE_DIR=/var/data/state`（デプロイしてもレコードと PGlite が消えない） |
-| Gemini CLI | npm 依存として同梱（`node_modules/.bin/gemini`）。`GEMINI_API_KEY` で認証、`GEMINI_CLI_HOME=/var/data/gemini-home` |
+| Antigravity CLI | ビルド時に公式スクリプトで導入し `bin/agy` に配置。`GEMINI_API_KEY` で認証（起動スクリプトが `modelProvider: "gemini"` を settings.json に書き込む） |
 | 認証 | `NUXT_BASIC_AUTH_USER` と `NUXT_BASIC_AUTH_PASSWORD` を両方設定すると全ページ・API・`/mcp` に Basic 認証がかかる（`/api/health` は除外）。MCP クライアントからは `Authorization: Basic ...` ヘッダで接続 |
 | プラン | 永続ディスクは有料インスタンス（starter 以上）が必要。無料で試す場合は `render.yaml` の `disk:` と `/var/data` 系の環境変数を外す（その場合データはデプロイごとに失われる） |
 | Git 同期 | Render 上のデータフォルダはリポジトリ外（永続ディスク）なので同期パネルは使えません。一次資料の追加はサーバ上のディスクに直接置くか、ローカルで編集して Render の Shell / SFTP で転送してください。ローカル運用では従来どおり使えます |
@@ -218,7 +220,15 @@ git checkout render && git merge <作業ブランチ> && git push origin render
 
 別のプロジェクトから使う場合は `claude mcp add --transport http phrapedia http://localhost:3000/mcp`。
 
-### Gemini CLI
+### Antigravity CLI
+
+```bash
+agy mcp add phrapedia --url http://localhost:3000/mcp
+```
+
+（または共有設定 `~/.gemini/config/mcp_config.json` に `url` 付きのサーバ定義を追加。`agy mcp list` で確認。）
+
+### Gemini CLI（旧）
 
 `~/.gemini/settings.json`（またはプロジェクトの `.gemini/settings.json`）:
 
@@ -243,7 +253,7 @@ git checkout render && git merge <作業ブランチ> && git push origin render
 | `list_sources` | 一次資料フォルダのファイル一覧 |
 | `search_sources` | 一次資料の全文検索（部分一致、タイ語・日本語・英語） |
 | `read_source` | 一次資料を読む（テキストは本文、画像は画像として返す） |
-| `web_research` | Gemini CLI で Web 調査（結果は **未確認** 扱い、キャッシュあり） |
+| `web_research` | Antigravity CLI / Gemini CLI で Web 調査（結果は **未確認** 扱い、キャッシュあり） |
 | `sync_status` | データフォルダの Git 状態 |
 | `sync_data` | データフォルダをコミット → pull --rebase → push |
 
@@ -264,10 +274,12 @@ npm start           # 本番サーバ起動（.env を読み込む）
 
 | 症状 | 対処 |
 |---|---|
-| **Gemini CLI が見つからない**（`Gemini CLI not found`） | `npm i -g @google/gemini-cli` を実行し、`gemini --version` が通るか確認。PATH が通らない環境（サービス起動など）では 設定 →「Gemini コマンド」に絶対パス（`which gemini` の結果）を入れる |
-| Gemini が認証エラー（終了コード 41） | `GEMINI_API_KEY` を `.env` かシェルに設定するか、ターミナルで一度 `gemini` を起動してログイン |
+| **CLI が見つからない**（`CLI not found`） | `agy --version` が通るか確認（インストール: `curl -fsSL https://antigravity.google/cli/install.sh \| bash`）。PATH が通らない環境（サービス起動など）では 設定 →「コマンド」に絶対パス（`which agy` の結果、通常 `~/.local/bin/agy`）を入れる |
+| `agy` が終了コード 1 で失敗 | 未ログインの可能性。ターミナルで一度 `agy` を起動して Google にサインインするか、`GEMINI_API_KEY` ＋ `~/.gemini/antigravity-cli/settings.json` の `"modelProvider": "gemini"` を設定 |
+| `agy` が終了コード 3 | モデル／エージェント側のエラー、または `--print-timeout` による打ち切り。部分的な応答があればそのまま使われる |
+| 旧 Gemini CLI が認証エラー（終了コード 41） | `GEMINI_API_KEY` を `.env` かシェルに設定するか、ターミナルで一度 `gemini` を起動してログイン |
 | **Web 調査がタイムアウト** | 設定 →「タイムアウト」を延ばす（例: 300000）。モデルを `flash` にすると速くなる。同じ質問はキャッシュされる |
-| **チャットが「API キーが設定されていません」** | `.env` に `NUXT_ANTHROPIC_API_KEY=sk-ant-...` を書いてサーバを再起動。無い場合は チャットエンジンを Gemini CLI に |
+| **チャットが「API キーが設定されていません」** | `.env` に `NUXT_ANTHROPIC_API_KEY=sk-ant-...` を書いてサーバを再起動。無い場合は チャットエンジンを Google CLI に |
 | API キーが無効（401） | キーの値・有効期限・組織の利用制限を確認 |
 | **PGlite のエラー / 起動しない** | `.phrapedia/` は消しても再生成されます（設定・チャット履歴・キャッシュは失われ、レコードと一次資料は無事）。同じ `.phrapedia/` を 2 つのサーバで同時に開くと壊れることがあるので、開発サーバと本番サーバを同時に起動しない（どうしても必要なら `NUXT_STATE_DIR` を分ける） |
 | 一次資料が検索に出ない | パス（設定 → 一次資料フォルダ）を確認。`.` で始まるフォルダは対象外。PDF は本文検索非対応 |

@@ -3,7 +3,7 @@
 タイの高僧・寺院（将来: プラクルアン）の知識ベース。Markdown ファイルが正本。詳細な契約は `docs/ARCHITECTURE.md`。
 
 ## スタック
-Nuxt 4 (SSR, TS strict) / Nuxt UI v4 / Tailwind v4 / `@nuxtjs/mcp-toolkit`（`/mcp`）/ PGlite（`.phrapedia/`）/ Anthropic SDK（チャット）/ Gemini CLI（Web 調査）/ simple-git。
+Nuxt 4 (SSR, TS strict) / Nuxt UI v4 / Tailwind v4 / `@nuxtjs/mcp-toolkit`（`/mcp`）/ PGlite（`.phrapedia/`）/ Anthropic SDK（チャット）/ Antigravity CLI `agy`（Web 調査。旧 Gemini CLI も選択可）/ simple-git。
 
 ## コマンド
 ```bash

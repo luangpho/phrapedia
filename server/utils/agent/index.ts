@@ -5,7 +5,7 @@ import { runGeminiChat } from './gemini-cli'
 import { buildSystemPrompt } from './prompt'
 
 export const NO_ANTHROPIC_KEY_MESSAGE
-  = 'Anthropic API キーが設定されていません（.env の NUXT_ANTHROPIC_API_KEY）。設定で Gemini CLI プロバイダに切り替えることもできます。'
+  = 'Anthropic API キーが設定されていません（.env の NUXT_ANTHROPIC_API_KEY）。設定でチャットエンジンを「Google CLI（Antigravity / Gemini）」に切り替えることもできます。'
 
 export interface ChatTurnResult {
   session: ChatSession

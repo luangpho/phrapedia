@@ -19,10 +19,21 @@ watch(view, (v) => {
 }, { immediate: true })
 
 const approvalModeItems = [
-  { label: 'auto_edit（推奨）', value: 'auto_edit' },
-  { label: 'default（web_fetch 不可）', value: 'default' },
+  { label: 'default（検索のみ・推奨）', value: 'default' },
+  { label: 'auto_edit（agy: --mode accept-edits / gemini: web_fetch 許可）', value: 'auto_edit' },
   { label: 'yolo（全ツール許可・非推奨）', value: 'yolo' },
 ]
+
+const engineItems = [
+  { label: 'Antigravity CLI（agy）— 推奨', value: 'antigravity' },
+  { label: 'Gemini CLI（gemini）— 旧 CLI', value: 'gemini-cli' },
+]
+
+// Keep the command in sync with the engine while the user has not customised it
+watch(() => state.gemini.engine, (engine, prev) => {
+  const defaults: Record<string, string> = { 'antigravity': 'agy', 'gemini-cli': 'gemini' }
+  if (!prev || state.gemini.command === defaults[prev]) state.gemini.command = defaults[engine] ?? state.gemini.command
+})
 
 const argsText = computed({
   get: () => state.gemini.args.join('\n'),
@@ -31,7 +42,7 @@ const argsText = computed({
 
 const providerItems = [
   { label: 'Anthropic API（Claude）', value: 'anthropic' },
-  { label: 'Gemini CLI', value: 'gemini-cli' },
+  { label: 'Google CLI（Antigravity / Gemini、ツール呼び出し無し）', value: 'gemini-cli' },
 ]
 
 function validate(s: AppSettings): FormError[] {
@@ -143,7 +154,7 @@ async function onReindex() {
                     variant="subtle"
                   />
                   <UBadge
-                    :label="`Gemini CLI ${view.capabilities.geminiFound ? '検出済み' : '未検出'}${view.capabilities.geminiVersion ? ` (${view.capabilities.geminiVersion})` : ''}`"
+                    :label="`${view.capabilities.geminiEngine} ${view.capabilities.geminiFound ? '検出済み' : '未検出'}${view.capabilities.geminiVersion ? ` (${view.capabilities.geminiVersion})` : ''}`"
                     :color="view.capabilities.geminiFound ? 'success' : 'neutral'"
                     :icon="view.capabilities.geminiFound ? 'i-lucide-terminal' : 'i-lucide-circle-slash'"
                     variant="subtle"
@@ -169,21 +180,24 @@ async function onReindex() {
             </div>
           </UCard>
 
-          <!-- Gemini CLI -->
+          <!-- Google CLI (Antigravity / Gemini) -->
           <UCard>
             <template #header>
-              <h2 class="font-semibold text-highlighted flex items-center gap-2"><UIcon name="i-lucide-terminal" class="size-4" />Gemini CLI（Web 調査）</h2>
+              <h2 class="font-semibold text-highlighted flex items-center gap-2"><UIcon name="i-lucide-terminal" class="size-4" />Google CLI（Web 調査）</h2>
             </template>
             <div class="space-y-4">
+              <UFormField label="CLI" name="gemini.engine" description="2026 年 6 月以降、無料枠 / Google One では Gemini CLI は Antigravity CLI（agy）に置き換わっています。agy は curl -fsSL https://antigravity.google/cli/install.sh | bash で導入">
+                <USelect v-model="state.gemini.engine" :items="engineItems" class="w-full sm:w-96" />
+              </UFormField>
               <div class="grid gap-4 sm:grid-cols-2">
-                <UFormField label="コマンド" name="gemini.command" required>
-                  <UInput v-model="state.gemini.command" class="w-full font-mono" placeholder="gemini" />
+                <UFormField label="コマンド" name="gemini.command" required description="PATH が通らない場合は絶対パス（例: ~/.local/bin/agy）">
+                  <UInput v-model="state.gemini.command" class="w-full font-mono" :placeholder="state.gemini.engine === 'gemini-cli' ? 'gemini' : 'agy'" />
                 </UFormField>
-                <UFormField label="モデル" name="gemini.model" description="空欄 = CLI の既定">
-                  <UInput v-model="state.gemini.model" class="w-full font-mono" placeholder="gemini-2.5-pro" />
+                <UFormField label="モデル" name="gemini.model" description="空欄 = CLI の既定（agy: --model / gemini: -m）">
+                  <UInput v-model="state.gemini.model" class="w-full font-mono" placeholder="例: flash" />
                 </UFormField>
               </div>
-              <UFormField label="承認モード" name="gemini.approvalMode" description="ヘッドレス実行時のツール承認。Google 検索は常に許可。auto_edit で web_fetch も許可（推奨）。yolo はシェル等も許可するため非推奨">
+              <UFormField label="承認モード" name="gemini.approvalMode" description="ヘッドレス実行時のツール承認。Web 検索は既定で許可。URL 取得など承認が必要なツールを使わせたい場合のみ auto_edit。yolo はシェル等も許可するため非推奨">
                 <USelect v-model="state.gemini.approvalMode" :items="approvalModeItems" class="w-full sm:w-72" />
               </UFormField>
               <UFormField label="追加引数" name="gemini.args" description="1 行に 1 つ">

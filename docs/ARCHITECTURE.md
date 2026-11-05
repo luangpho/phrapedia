@@ -11,8 +11,8 @@
 | MCP | `@nuxtjs/mcp-toolkit` — `server/mcp/tools/*.ts` が `/mcp`（Streamable HTTP）として公開され、同じ定義をアプリ内チャットAIも使う |
 | アプリ状態 DB | PGlite（埋め込み Postgres, `.phrapedia/pglite/`）— 設定・チャット履歴・一次資料インデックス・Web調査キャッシュ |
 | 一次情報 | `sources/`（設定で変更可）配下の Markdown / 画像。**最優先・確定情報**として扱う |
-| Web 調査 | Gemini CLI（`gemini -p ... --output-format json`）を `child_process` で呼び出す。結果は常に「未確認」扱い |
-| チャット AI | Anthropic Claude（ツール呼び出しループ, SSE ストリーミング）。API キーが無い場合は Gemini CLI をチャットエンジンとして使うフォールバック |
+| Web 調査 | Google の CLI を `child_process` で呼び出す。既定は **Antigravity CLI**（`agy --output-format json -p ...`。2026-06 に無料枠/Google One の Gemini CLI を置き換え）、旧 **Gemini CLI**（`gemini`、プロンプトは stdin）も選択可。結果は常に「未確認」扱い |
+| チャット AI | Anthropic Claude（ツール呼び出しループ, SSE ストリーミング）。API キーが無い場合は上記 Google CLI をチャットエンジンとして使うフォールバック（ツール呼び出し無し） |
 | 同期 | `simple-git` で `data/` をコミット → `pull --rebase` → `push`（GitHub） |
 
 ## ディレクトリ
@@ -108,6 +108,6 @@ updated_at: 2026-11-05T00:00:00.000Z
 ## MCP クライアントからの利用
 
 ```jsonc
-// Claude Code: .mcp.json / Gemini CLI: ~/.gemini/settings.json
+// Claude Code: .mcp.json / Antigravity CLI: `agy mcp add` または ~/.gemini/config/mcp_config.json / Gemini CLI: ~/.gemini/settings.json
 { "mcpServers": { "phrapedia": { "httpUrl": "http://localhost:3000/mcp" } } }
 ```

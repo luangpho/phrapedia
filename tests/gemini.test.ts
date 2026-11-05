@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unwrapGeminiOutput } from '../server/utils/gemini'
+import { unwrapGeminiOutput, buildCliInvocation } from '../server/utils/gemini'
 
 describe('unwrapGeminiOutput', () => {
   it('unwraps the JSON envelope', () => {
@@ -33,5 +33,46 @@ describe('unwrapGeminiOutput', () => {
 
   it('throws on an error envelope (string)', () => {
     expect(() => unwrapGeminiOutput(JSON.stringify({ error: 'auth failed' }))).toThrowError('auth failed')
+  })
+})
+
+describe('unwrapGeminiOutput (Antigravity CLI envelope)', () => {
+  it('unwraps the agy envelope', () => {
+    const out = JSON.stringify({ conversation_id: 'c1', status: 'success', response: '## 結果', usage: {} })
+    expect(unwrapGeminiOutput(out)).toBe('## 結果')
+  })
+
+  it('keeps a partial response and notes an abnormal finished_reason', () => {
+    const out = JSON.stringify({ conversation_id: 'c1', status: 'error', response: '途中まで', finished_reason: 'print_timeout', error: { message: 'timeout' } })
+    expect(unwrapGeminiOutput(out)).toContain('途中まで')
+    expect(unwrapGeminiOutput(out)).toContain('print_timeout')
+  })
+})
+
+describe('buildCliInvocation', () => {
+  it('puts the prompt in -p for Antigravity and does not use stdin', () => {
+    const { args, stdin } = buildCliInvocation('antigravity', { model: 'flash', extraArgs: [], approvalMode: 'default', prompt: 'Q' })
+    expect(stdin).toBeUndefined()
+    expect(args).toEqual(['--model', 'flash', '--output-format', 'json', '-p', 'Q'])
+  })
+
+  it('maps approval modes to agy flags', () => {
+    expect(buildCliInvocation('antigravity', { model: '', extraArgs: [], approvalMode: 'auto_edit', prompt: 'Q' }).args).toContain('accept-edits')
+    expect(buildCliInvocation('antigravity', { model: '', extraArgs: [], approvalMode: 'yolo', prompt: 'Q' }).args).toContain('--dangerously-skip-permissions')
+  })
+
+  it('does not duplicate flags given in extra args', () => {
+    const { args } = buildCliInvocation('antigravity', { model: 'flash', extraArgs: ['--model', 'pro', '--output-format', 'json'], approvalMode: 'default', prompt: 'Q' })
+    expect(args.filter(a => a === '--model')).toHaveLength(1)
+    expect(args.filter(a => a === '--output-format')).toHaveLength(1)
+  })
+
+  it('sends the prompt on stdin for Gemini CLI with a -p trailer', () => {
+    const { args, stdin } = buildCliInvocation('gemini-cli', { model: 'flash', extraArgs: [], approvalMode: 'default', prompt: 'Q' })
+    expect(stdin).toBe('Q')
+    expect(args.slice(0, 2)).toEqual(['-m', 'flash'])
+    expect(args).toContain('--approval-mode')
+    expect(args).toContain('--skip-trust')
+    expect(args[args.length - 2]).toBe('-p')
   })
 })

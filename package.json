@@ -19,7 +19,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
     "@electric-sql/pglite": "^0.5.15",
-    "@google/gemini-cli": "^0.67.0",
     "@nuxt/ui": "^4.12.0",
     "@nuxtjs/mcp-toolkit": "^0.24.3",
     "@tailwindcss/typography": "^0.5.20",

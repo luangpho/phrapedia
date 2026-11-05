@@ -7,6 +7,6 @@ export default defineEventHandler(async (): Promise<SettingsView> => {
   return {
     ...s,
     resolved: { sourcesDir: resolveFromRoot(s.sourcesDir), dataDir: resolveFromRoot(s.dataDir), projectRoot: projectRoot() },
-    capabilities: { anthropicConfigured: Boolean(cfg.anthropicApiKey || process.env.ANTHROPIC_API_KEY), geminiFound: gemini.found, geminiVersion: gemini.version },
+    capabilities: { anthropicConfigured: Boolean(cfg.anthropicApiKey || process.env.ANTHROPIC_API_KEY), geminiFound: gemini.found, geminiVersion: gemini.version, geminiEngine: ENGINE_LABELS[gemini.engine] },
   }
 })

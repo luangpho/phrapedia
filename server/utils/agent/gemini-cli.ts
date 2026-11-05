@@ -91,7 +91,7 @@ async function gatherContext(userMessage: string, draft: string): Promise<{ text
   return { text: blocks.join('\n'), used: hits.map(h => h.path) }
 }
 
-/** Single-shot chat via Gemini CLI (no tool calling). The updated record comes back in a ```markdown:draft block. */
+/** Single-shot chat via the Google CLI (Antigravity CLI / Gemini CLI; no tool calling). The updated record comes back in a ```markdown:draft block. */
 export async function runGeminiChat(opts: GeminiChatOptions): Promise<AgentRunResult> {
   const { onEvent, signal } = opts
   const parts: ChatPart[] = []
@@ -125,12 +125,12 @@ export async function runGeminiChat(opts: GeminiChatOptions): Promise<AgentRunRe
       onEvent({ type: 'text-delta', delta: text })
     }
     if (draft) {
-      const summary = 'Gemini CLI による下書きの更新'
+      const summary = 'Google CLI（Antigravity / Gemini）による下書きの更新'
       parts.push({ type: 'draft', markdown: draft, summary })
       onEvent({ type: 'draft', markdown: draft, summary })
     }
     if (!text && !draft) {
-      const note = '（Gemini CLI から回答がありませんでした）'
+      const note = '（CLI から回答がありませんでした）'
       parts.push({ type: 'text', text: note })
       onEvent({ type: 'text-delta', delta: note })
     }
@@ -138,7 +138,7 @@ export async function runGeminiChat(opts: GeminiChatOptions): Promise<AgentRunRe
   } catch (err) {
     if (signal?.aborted) return { parts, aborted: true }
     const e = err as { message?: string; statusMessage?: string }
-    const message = `Gemini CLI でエラーが発生しました: ${e?.message || e?.statusMessage || String(err)}`
+    const message = `Google CLI でエラーが発生しました: ${e?.message || e?.statusMessage || String(err)}`
     onEvent({ type: 'error', message })
     return { parts, error: message }
   }

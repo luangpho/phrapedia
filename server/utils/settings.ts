@@ -25,7 +25,10 @@ function envDefaults(): AppSettings {
     sourcesDir: cfg.sourcesDir || DEFAULT_SETTINGS.sourcesDir,
     dataDir: cfg.dataDir || DEFAULT_SETTINGS.dataDir,
     ai: { anthropicModel: cfg.anthropicModel || DEFAULT_SETTINGS.ai.anthropicModel },
-    gemini: { command: cfg.geminiCommand || DEFAULT_SETTINGS.gemini.command },
+    gemini: {
+      engine: (cfg.geminiEngine === 'gemini-cli' ? 'gemini-cli' : cfg.geminiEngine === 'antigravity' ? 'antigravity' : DEFAULT_SETTINGS.gemini.engine),
+      command: cfg.geminiCommand || DEFAULT_SETTINGS.gemini.command,
+    },
   } as Partial<AppSettings>)
 }
 

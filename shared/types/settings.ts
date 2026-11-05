@@ -13,15 +13,23 @@ export interface AppSettings {
     extraInstructions: string
   }
   gemini: {
-    /** Executable name or absolute path of the Gemini CLI */
+    /**
+     * Which Google CLI performs the web research.
+     * - antigravity: Antigravity CLI (`agy`) — replaced Gemini CLI for unpaid / Google One users in June 2026
+     * - gemini-cli: legacy `@google/gemini-cli` (`gemini`), still usable with paid tiers / API keys
+     */
+    engine: 'antigravity' | 'gemini-cli'
+    /** Executable name or absolute path of the CLI (`agy` or `gemini`) */
     command: string
     /** Extra CLI arguments inserted before the prompt (e.g. ["-m", "gemini-2.5-pro"]) */
     args: string[]
     /** Model passed with -m (e.g. "flash", "pro", "gemini-2.5-pro"). Empty = CLI default ("auto"). */
     model: string
     /**
-     * Gemini CLI approval mode. In headless mode google_web_search is always allowed; web_fetch is denied under
-     * "default" and allowed under "auto_edit" / "yolo". "yolo" also allows shell/file tools, so prefer "auto_edit".
+     * Tool-approval mode for headless runs.
+     * - antigravity: default = no flag, auto_edit = `--mode accept-edits`, yolo = `--dangerously-skip-permissions`
+     * - gemini-cli: passed as `--approval-mode` (google_web_search is always allowed; web_fetch needs auto_edit/yolo)
+     * "yolo" also allows shell/file tools, so prefer default / auto_edit.
      */
     approvalMode: 'default' | 'auto_edit' | 'yolo'
     timeoutMs: number
@@ -50,10 +58,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     extraInstructions: '',
   },
   gemini: {
-    command: 'gemini',
+    engine: 'antigravity',
+    command: 'agy',
     args: [],
     model: '',
-    approvalMode: 'auto_edit',
+    approvalMode: 'default',
     timeoutMs: 180_000,
     cacheHours: 24,
   },
@@ -78,5 +87,7 @@ export interface SettingsView extends AppSettings {
     anthropicConfigured: boolean
     geminiFound: boolean
     geminiVersion?: string
+    /** Human label of the configured research CLI, e.g. "Antigravity CLI (agy)" */
+    geminiEngine: string
   }
 }

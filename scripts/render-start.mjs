@@ -6,7 +6,8 @@
  *    seed them from the repository's data/ and sources/ folders (sample records, README).
  * 2. Start the Nitro server (.output/server/index.mjs). PORT/HOST come from the environment.
  */
-import { cp, mkdir, readdir, stat } from 'node:fs/promises'
+import { cp, mkdir, readdir, stat, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, isAbsolute } from 'node:path'
@@ -46,6 +47,24 @@ await seed('sources', sourcesDir)
 await mkdir(stateDir, { recursive: true })
 for (const extra of [process.env.GEMINI_CLI_HOME]) {
   if (extra) await mkdir(extra, { recursive: true })
+}
+
+// Antigravity CLI: headless auth with an API key needs modelProvider: "gemini" in its settings.json
+// (https://github.com/google-antigravity/antigravity-cli CHANGELOG 1.1.13). Merge it in when a key is present.
+if (process.env.GEMINI_API_KEY && (process.env.NUXT_GEMINI_ENGINE || 'antigravity') === 'antigravity') {
+  const dir = resolve(process.env.GEMINI_CLI_HOME || resolve(homedir(), '.gemini'), 'antigravity-cli')
+  const file = resolve(dir, 'settings.json')
+  try {
+    await mkdir(dir, { recursive: true })
+    let current = {}
+    try { current = JSON.parse(await readFile(file, 'utf8')) } catch { /* new file */ }
+    if (current.modelProvider !== 'gemini') {
+      await writeFile(file, JSON.stringify({ ...current, modelProvider: 'gemini' }, null, 2) + '\n')
+      console.log(`[phrapedia] set modelProvider=gemini in ${file}`)
+    }
+  } catch (err) {
+    console.warn(`[phrapedia] could not prepare agy settings: ${err.message}`)
+  }
 }
 
 const child = spawn(process.execPath, [resolve(root, '.output/server/index.mjs')], {

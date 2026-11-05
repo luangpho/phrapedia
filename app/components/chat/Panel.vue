@@ -38,7 +38,7 @@ const { data: settings } = useSettings()
 const providerLabel = computed(() => {
   const p = settings.value?.ai.provider
   if (p === 'anthropic') return 'Claude'
-  if (p === 'gemini-cli') return 'Gemini CLI'
+  if (p === 'gemini-cli') return settings.value?.capabilities?.geminiEngine?.replace(/ \(.*\)$/, '') || 'Google CLI'
   return null
 })
 const missingKey = computed(() => settings.value?.ai.provider === 'anthropic' && settings.value?.capabilities?.anthropicConfigured === false)
@@ -70,7 +70,7 @@ const TOOL_LABELS: Record<string, string> = {
   search_sources: '一次資料を検索',
   list_sources: '一次資料の一覧',
   read_source: '一次資料を読む',
-  web_research: 'Web 調査（Gemini）',
+  web_research: 'Web 調査（Google CLI）',
   list_entities: 'レコード一覧',
   get_entity: 'レコードを取得',
   save_entity: 'レコードを保存',
@@ -159,7 +159,7 @@ function onNewConversation() {
         variant="subtle"
         icon="i-lucide-key-round"
         title="Anthropic API キーが未設定です"
-        description=".env の NUXT_ANTHROPIC_API_KEY を設定するか、設定画面でプロバイダを Gemini CLI に切り替えてください。"
+        description=".env の NUXT_ANTHROPIC_API_KEY を設定するか、設定画面でチャットエンジンを Google CLI（Antigravity / Gemini）に切り替えてください。"
       />
 
       <!-- loading -->

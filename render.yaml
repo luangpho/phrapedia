@@ -9,7 +9,8 @@ services:
     region: singapore        # closest region to Thailand/Japan; change as you like
     branch: render
     autoDeploy: true
-    buildCommand: npm ci && npm run build
+    # Antigravity CLI (agy) is installed by its official script into ~/.local/bin and copied into the project dir
+    buildCommand: npm ci && npm run build && (curl -fsSL https://antigravity.google/cli/install.sh | bash) && mkdir -p bin && cp "$HOME/.local/bin/agy" bin/agy && chmod +x bin/agy
     startCommand: node scripts/render-start.mjs
     healthCheckPath: /api/health
     disk:
@@ -28,11 +29,12 @@ services:
         value: /var/data/sources
       - key: NUXT_STATE_DIR
         value: /var/data/state
-      # Gemini CLI is installed as an npm dependency; GEMINI_API_KEY must be set in the dashboard
+      # Antigravity CLI (agy) built into bin/ (see buildCommand); authenticated with GEMINI_API_KEY (set in the dashboard).
+      # scripts/render-start.mjs writes modelProvider: "gemini" into ~/.gemini/antigravity-cli/settings.json when the key is present.
+      - key: NUXT_GEMINI_ENGINE
+        value: antigravity
       - key: NUXT_GEMINI_COMMAND
-        value: /opt/render/project/src/node_modules/.bin/gemini
-      - key: GEMINI_CLI_HOME
-        value: /var/data/gemini-home
+        value: /opt/render/project/src/bin/agy
       # Secrets — set these in the Render dashboard (sync: false = never stored in this file)
       - key: NUXT_ANTHROPIC_API_KEY
         sync: false

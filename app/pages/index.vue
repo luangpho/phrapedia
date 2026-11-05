@@ -75,7 +75,7 @@ async function copyMcp() {
             <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" label="設定をコピー" @click="copyMcp" />
           </div>
           <p class="text-sm text-muted leading-6">
-            Claude Code や Gemini CLI から <code class="font-mono text-xs text-highlighted">{{ mcpUrl }}</code> に接続すると、
+            Claude Code や Antigravity CLI から <code class="font-mono text-xs text-highlighted">{{ mcpUrl }}</code> に接続すると、
             同じデータを MCP ツール（検索・取得・保存・一次資料・Web 調査・同期）で扱えます。
           </p>
           <pre class="rounded-md border border-default bg-elevated/50 p-3 text-xs font-mono overflow-x-auto">{{ mcpJson }}</pre>

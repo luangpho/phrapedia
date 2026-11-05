@@ -15,6 +15,7 @@ const SettingsPatch = z.object({
     extraInstructions: z.string().max(20_000).optional(),
   }).strict().optional(),
   gemini: z.object({
+    engine: z.enum(['antigravity', 'gemini-cli']).optional(),
     command: nonEmpty.optional(),
     args: z.array(z.string().max(1000)).max(50).optional(),
     model: z.string().trim().max(100).optional(),

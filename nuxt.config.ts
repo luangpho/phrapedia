@@ -21,7 +21,8 @@ export default defineNuxtConfig({
     dataDir: 'data',
     sourcesDir: 'sources',
     stateDir: '.phrapedia',
-    geminiCommand: 'gemini',
+    geminiEngine: 'antigravity',
+    geminiCommand: 'agy',
     // Optional Basic auth for public deployments (NUXT_BASIC_AUTH_USER / NUXT_BASIC_AUTH_PASSWORD)
     basicAuthUser: '',
     basicAuthPassword: '',
