@@ -12,7 +12,12 @@ export function assertKind(kind: string | undefined): EntityKind {
 }
 
 export function assertSlug(slug: string | undefined): string {
-  const s = decodeURIComponent(slug ?? '')
+  let s: string
+  try {
+    s = decodeURIComponent(slug ?? '')
+  } catch {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid slug', message: `Invalid slug encoding: ${slug}` })
+  }
   if (!isValidSlug(s)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid slug', message: `Invalid slug: ${slug}` })
   }
@@ -33,17 +38,32 @@ function toStatus(v: unknown): EntityStatus {
   return v === 'verified' || v === 'reviewed' ? v : 'draft'
 }
 
-function relPath(kind: EntityKind, slug: string): string {
-  return `data/${kind}/${slug}.md`
+/** Path of a record relative to the project root (e.g. data/monks/x.md), following the configured dataDir. */
+function relPath(dataRoot: string, kind: EntityKind, slug: string): string {
+  const root = projectRoot()
+  const base = isInside(root, dataRoot) ? toPosix(dataRoot.slice(root.length).replace(/^[\\/]+/, '')) || '.' : toPosix(dataRoot)
+  return `${base}/${kind}/${slug}.md`
 }
 
-function toRecord(kind: EntityKind, slug: string, raw: string, mtime?: Date): EntityRecord {
+const LIST_FIELDS = ['aliases', 'sources', 'tags'] as const
+
+/** Hand-written frontmatter may use a scalar where a list is expected; normalise to string[]. */
+function toStringList(v: unknown): string[] | undefined {
+  if (v === undefined || v === null || v === '') return undefined
+  const arr = Array.isArray(v) ? v : [v]
+  return arr.filter(x => x !== null && x !== undefined && x !== '').map(x => (typeof x === 'string' ? x : String(x)))
+}
+
+function toRecord(dataRoot: string, kind: EntityKind, slug: string, raw: string, mtime?: Date): EntityRecord {
   const { data, body } = parseFrontmatter<Partial<EntityFrontmatter>>(raw)
   const fm: EntityFrontmatter = {
     ...data,
     slug,
     kind,
     name: typeof data.name === 'string' && data.name ? data.name : titleFromBody(body) || slug,
+  }
+  for (const key of LIST_FIELDS) {
+    if (key in fm) fm[key] = toStringList(fm[key])
   }
   return {
     kind,
@@ -56,7 +76,7 @@ function toRecord(kind: EntityKind, slug: string, raw: string, mtime?: Date): En
     frontmatter: fm,
     body,
     raw,
-    path: relPath(kind, slug),
+    path: relPath(dataRoot, kind, slug),
   }
 }
 
@@ -67,6 +87,7 @@ function titleFromBody(body: string): string | undefined {
 
 export async function listEntities(kind: EntityKind): Promise<EntitySummary[]> {
   const dir = await kindDir(kind)
+  const dataRoot = await dataDir()
   const files = (await readdir(dir)).filter(f => f.endsWith('.md') && !f.startsWith('.') && f.toLowerCase() !== 'readme.md')
   const out: EntitySummary[] = []
   for (const f of files) {
@@ -74,7 +95,7 @@ export async function listEntities(kind: EntityKind): Promise<EntitySummary[]> {
     try {
       const full = join(dir, f)
       const [raw, st] = await Promise.all([readFile(full, 'utf8'), stat(full)])
-      const rec = toRecord(kind, slug, raw, st.mtime)
+      const rec = toRecord(dataRoot, kind, slug, raw, st.mtime)
       out.push({ kind, slug, name: rec.name, name_th: rec.name_th, name_en: rec.name_en, status: rec.status, updatedAt: rec.updatedAt })
     } catch {
       out.push({ kind, slug, name: slug, status: 'draft' })
@@ -87,7 +108,7 @@ export async function getEntity(kind: EntityKind, slug: string): Promise<EntityR
   const full = await entityPath(kind, slug)
   try {
     const [raw, st] = await Promise.all([readFile(full, 'utf8'), stat(full)])
-    return toRecord(kind, slug, raw, st.mtime)
+    return toRecord(await dataDir(), kind, slug, raw, st.mtime)
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw err
@@ -149,10 +170,13 @@ export async function writeEntity(kind: EntityKind, slug: string, raw: string, o
     created_at: (typeof data.created_at === 'string' && data.created_at) || previous?.frontmatter.created_at || now,
     updated_at: now,
   }
+  for (const key of LIST_FIELDS) {
+    if (key in fm) fm[key] = toStringList(fm[key])
+  }
   const content = stringifyFrontmatter(fm, body)
   const full = await entityPath(kind, slug)
   await writeFile(full, content, 'utf8')
-  return toRecord(kind, slug, content, new Date(now))
+  return toRecord(await dataDir(), kind, slug, content, new Date(now))
 }
 
 export async function deleteEntity(kind: EntityKind, slug: string): Promise<void> {

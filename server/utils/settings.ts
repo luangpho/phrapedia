@@ -36,16 +36,28 @@ export async function getSettings(): Promise<AppSettings> {
   return deepMerge(envDefaults(), stored)
 }
 
+/**
+ * Persist a settings patch. Only the user's own overrides are stored (merged with the previously stored
+ * overrides), never the env-derived defaults, so changing NUXT_* variables later still takes effect.
+ */
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const db = await useDb()
-  const current = await getSettings()
-  const next = deepMerge(current, patch)
+  const res = await db.query<{ value: Partial<AppSettings> }>('SELECT value FROM settings WHERE key = $1', [SETTINGS_KEY])
+  const stored = (res.rows[0]?.value ?? {}) as Partial<AppSettings>
+  const overrides = deepMerge(stored as AppSettings, patch)
   await db.query(
     `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, now())
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [SETTINGS_KEY, JSON.stringify(next)],
+    [SETTINGS_KEY, JSON.stringify(overrides)],
   )
-  return next
+  return deepMerge(envDefaults(), overrides)
+}
+
+/** Git ref / remote names that are safe to pass to git on the command line (no option injection). */
+export const GIT_NAME_RE = /^(?!-)(?!.*\.\.)(?!.*[\s~^:?*\[\\])(?!.*\/$)(?!.*\.lock$)[\x21-\x7E\u0080-\uFFFF]{1,200}$/
+
+export function isSafeGitName(name: string): boolean {
+  return name === '' || GIT_NAME_RE.test(name)
 }
 
 /** Absolute path of the primary-sources directory. */

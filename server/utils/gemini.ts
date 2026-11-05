@@ -9,8 +9,10 @@ export interface GeminiRunOptions {
   /** Override settings.gemini.model */
   model?: string
   timeoutMs?: number
-  /** Bypass the research cache */
+  /** Bypass the research cache (neither read nor written) */
   noCache?: boolean
+  /** Abort (kills the CLI process) when the caller goes away */
+  signal?: AbortSignal
 }
 
 export interface GeminiRunResult {
@@ -79,7 +81,7 @@ export async function runGemini(opts: GeminiRunOptions): Promise<GeminiRunResult
   args.push('-p', '上記の指示に従って回答してください。')
 
   const started = Date.now()
-  const { stdout, stderr, code } = await run(command, args, { timeoutMs, stdin: opts.prompt })
+  const { stdout, stderr, code } = await run(command, args, { timeoutMs, stdin: opts.prompt, signal: opts.signal })
   const durationMs = Date.now() - started
   if (code !== 0 && !stdout.trim()) {
     const hint = code === 41
@@ -91,7 +93,7 @@ export async function runGemini(opts: GeminiRunOptions): Promise<GeminiRunResult
   if (!text.trim()) {
     throw createError({ statusCode: 502, statusMessage: 'Gemini CLI returned no output', message: stderr.trim().slice(0, 2000) || 'empty response' })
   }
-  if (cacheHours > 0) {
+  if (!opts.noCache && cacheHours > 0) {
     await db.query(
       `INSERT INTO research_cache (query_hash, query, result, model, created_at) VALUES ($1, $2, $3, $4, now())
        ON CONFLICT (query_hash) DO UPDATE SET result = EXCLUDED.result, model = EXCLUDED.model, created_at = now()`,
@@ -124,8 +126,12 @@ export function unwrapGeminiOutput(stdout: string): string {
   return trimmed
 }
 
-function run(command: string, args: string[], opts: { timeoutMs: number; stdin?: string }): Promise<{ stdout: string; stderr: string; code: number | null }> {
+function run(command: string, args: string[], opts: { timeoutMs: number; stdin?: string; signal?: AbortSignal }): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolvePromise, reject) => {
+    if (opts.signal?.aborted) {
+      reject(createError({ statusCode: 499, statusMessage: 'Aborted', message: 'Gemini CLI call was aborted' }))
+      return
+    }
     // Run inside an empty work dir so the project's own GEMINI.md / .gemini settings are not picked up.
     const cwd = join(stateDir(), 'gemini-work')
     mkdirSync(cwd, { recursive: true })
@@ -145,19 +151,30 @@ function run(command: string, args: string[], opts: { timeoutMs: number; stdin?:
     child.stdin.end(opts.stdin ?? '')
     let stdout = ''
     let stderr = ''
-    const timer = setTimeout(() => {
+    const terminate = () => {
       child.kill('SIGTERM')
       setTimeout(() => child.kill('SIGKILL'), 5_000).unref()
+    }
+    const timer = setTimeout(() => {
+      terminate()
       reject(createError({ statusCode: 504, statusMessage: 'Gemini CLI timeout', message: `gemini did not finish within ${opts.timeoutMs} ms` }))
     }, opts.timeoutMs)
+    const onAbort = () => {
+      clearTimeout(timer)
+      terminate()
+      reject(createError({ statusCode: 499, statusMessage: 'Aborted', message: 'Gemini CLI call was aborted' }))
+    }
+    opts.signal?.addEventListener('abort', onAbort, { once: true })
     child.stdout.on('data', (d: Buffer) => { stdout += d.toString('utf8') })
     child.stderr.on('data', (d: Buffer) => { stderr += d.toString('utf8') })
     child.on('error', (err) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', onAbort)
       reject(createError({ statusCode: 500, statusMessage: 'Gemini CLI not found', message: `Could not start "${command}": ${err.message}` }))
     })
     child.on('close', (code) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', onAbort)
       resolvePromise({ stdout, stderr, code })
     })
   })

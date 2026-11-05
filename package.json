@@ -11,9 +11,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
-    "lint": "eslint .",
     "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

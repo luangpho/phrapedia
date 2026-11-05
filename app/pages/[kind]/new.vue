@@ -53,6 +53,23 @@ function onDraft(markdown: string, summary?: string) {
   draftNotice.value = summary || ''
 }
 
+/** The AI saved the record itself (save_entity): open the saved record instead of saving a duplicate. */
+async function onSaved(saved: { kind: EntityKind; slug: string; path?: string }) {
+  skipGuard = true
+  baseline.value = raw.value
+  await bindDraftChatSession(kind.value, saved.slug)
+  await useEntities().refreshList(saved.kind)
+  toast.add({ title: 'AI がレコードを保存しました', description: saved.path, icon: 'i-lucide-check', color: 'success' })
+  await navigateTo(`/${saved.kind}/${saved.slug}`)
+}
+
+/** A previous draft conversation was restored: bring back its last draft while the editor is still untouched. */
+function onRestored(last: { markdown: string; summary?: string } | null) {
+  if (!last || raw.value !== baseline.value) return
+  raw.value = last.markdown
+  draftNotice.value = last.summary || '前回の下書きを復元しました'
+}
+
 async function save() {
   if (saving.value) return
   if (!raw.value.trim()) return
@@ -83,6 +100,7 @@ async function confirmDiscard() {
   skipGuard = true
   discardOpen.value = false
   raw.value = baseline.value
+  clearDraftChatSession(kind.value)
   await navigateTo('/')
 }
 </script>
@@ -120,7 +138,7 @@ async function confirmDiscard() {
     </template>
 
     <template #body>
-      <EntityWorkspace v-model:open="chatOpen" :kind="kind" :slug="null" :draft="raw" :hint="hint" @draft="onDraft">
+      <EntityWorkspace v-model:open="chatOpen" :kind="kind" :slug="null" :draft="raw" :hint="hint" @draft="onDraft" @saved="onSaved" @restored="onRestored">
         <div class="max-w-4xl space-y-4">
           <UAlert
             v-if="error"

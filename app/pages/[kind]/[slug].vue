@@ -79,14 +79,16 @@ function onDraft(markdown: string, summary?: string) {
 // ---- delete ----
 const deleteOpen = ref(false)
 const deleting = ref(false)
+/** true once the record was deleted; the page shows a neutral placeholder until navigation completes */
+const deleted = ref(false)
 
 async function confirmDelete() {
   if (!record.value) return
   deleting.value = true
   try {
     const path = record.value.path
+    deleted.value = true
     await remove(kind.value, slug.value)
-    editorRaw.value = record.value?.raw ?? ''
     editing.value = false
     deleteOpen.value = false
     toast.add({ title: '削除しました', description: path, icon: 'i-lucide-trash-2', color: 'success' })
@@ -100,6 +102,24 @@ async function confirmDelete() {
 
 const subtitle = computed(() => [record.value?.name_th, record.value?.name_en].filter(Boolean).join(' ・ '))
 const notFound = computed(() => (error.value as { statusCode?: number } | null)?.statusCode === 404)
+// SSR: report the real status for a missing/failed record instead of 200.
+if (import.meta.server && error.value) {
+  setResponseStatus(useRequestEvent()!, notFound.value ? 404 : 500)
+}
+
+/** The AI saved this (or another) record through save_entity: reload it and drop local edits that are now stale. */
+async function onSaved(saved: { kind: EntityKind; slug: string; path?: string }) {
+  await useEntities().refreshList(saved.kind)
+  if (saved.kind === kind.value && saved.slug === slug.value) {
+    await refresh()
+    editorRaw.value = record.value?.raw ?? editorRaw.value
+    editing.value = false
+    draftNotice.value = null
+    toast.add({ title: 'AI がレコードを保存しました', description: saved.path, icon: 'i-lucide-check', color: 'success' })
+  } else {
+    toast.add({ title: 'AI がレコードを保存しました', description: saved.path, icon: 'i-lucide-check', color: 'success', actions: [{ label: '開く', to: `/${saved.kind}/${saved.slug}` }] })
+  }
+}
 </script>
 
 <template>
@@ -154,6 +174,7 @@ const notFound = computed(() => (error.value as { statusCode?: number } | null)?
         <USkeleton class="h-4 w-2/3" />
       </div>
 
+      <div v-else-if="deleted" class="p-4 sm:p-6 text-sm text-muted">削除しました。</div>
       <div v-else-if="error || !record" class="p-4 sm:p-6 max-w-xl">
         <UAlert
           :color="notFound ? 'neutral' : 'error'"
@@ -174,6 +195,7 @@ const notFound = computed(() => (error.value as { statusCode?: number } | null)?
         :slug="slug"
         :draft="editorRaw"
         @draft="onDraft"
+        @saved="onSaved"
       >
         <UAlert
           v-if="draftNotice !== null"

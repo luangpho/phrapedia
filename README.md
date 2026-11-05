@@ -50,7 +50,7 @@
   - 環境変数 `GEMINI_API_KEY` を設定する（[Google AI Studio](https://aistudio.google.com/) で発行）
   - このマシンで一度 `gemini` を対話起動して **Google アカウントで OAuth ログイン** しておく（以後は資格情報が再利用されます）
 - **Anthropic API キー**（チャット AI に使用）
-  - 無い場合は 設定 →「チャットエンジン」を **Gemini CLI** に切り替えればチャットも Gemini で動きます（ツール呼び出しの精度は Claude の方が安定します）。
+  - 無い場合は 設定 →「チャットエンジン」を **Gemini CLI** に切り替えればチャットも Gemini で動きます（Gemini CLI モードはツール呼び出し無しの単発応答で、一次資料のテキストは自動で同梱されますが画像資料は渡せません。精度は Claude の方が安定します）。
 - Git（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
 
 ## クイックスタート
@@ -76,8 +76,20 @@ npm run dev               # http://localhost:3000
 
 ```bash
 npm run build
-node .output/server/index.mjs       # プロジェクト直下で実行。別の場所なら PHRAPEDIA_ROOT=/path/to/phrapedia
+npm start            # = node --env-file-if-exists=.env .output/server/index.mjs（本番サーバは .env を自動では読みません）
 ```
+
+別の場所から起動する場合は `PHRAPEDIA_ROOT=/path/to/phrapedia` を指定します。待ち受けは既定で全インターフェース（0.0.0.0）なので、
+自分だけが使うなら `HOST=127.0.0.1 PORT=3000 npm start` のようにローカルに限定してください。
+
+### セキュリティ上の注意
+
+Phrapedia はログイン機構のない「自分の PC で動かすツール」です。
+
+- 設定画面の値（Gemini CLI のコマンドパス、フォルダなど）はサーバ側でそのまま使われます。**信頼できる人だけが届くネットワーク**で動かしてください（`HOST=127.0.0.1` 推奨）。
+- ブラウザからの API 呼び出しには同一オリジン・JSON 限定のチェック（CSRF 対策）がかかっています。
+- API キーはブラウザへ渡さず、`.env` / 環境変数のみで扱います。
+- アプリ内のチャット AI には Git 同期ツール（`sync_data`）を渡していません。GitHub への push は常に同期パネルからの操作です（自動プッシュ設定を除く）。
 
 ## 情報の優先順位
 
@@ -218,6 +230,7 @@ npm run build       # 本番ビルド（.output/）
 npm run typecheck   # nuxt typecheck
 npm test            # vitest（tests/**/*.test.ts）
 npm run smoke       # ビルド済みサーバを起動して REST / MCP の疎通確認（先に npm run build）
+npm start           # 本番サーバ起動（.env を読み込む）
 ```
 
 ## トラブルシューティング

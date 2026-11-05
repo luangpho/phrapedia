@@ -46,7 +46,7 @@ export function createSseParser() {
  * Apply one stream event to the (in-progress) assistant message. Mutates `message.parts` in place.
  * Returns what the caller has to react to.
  */
-export function applyChatStreamEvent(message: ChatMessage, ev: ChatStreamEvent): { draft?: { markdown: string; summary?: string }; final?: ChatMessage; error?: string } {
+export function applyChatStreamEvent(message: ChatMessage, ev: ChatStreamEvent): { draft?: { markdown: string; summary?: string }; saved?: { kind: EntityKind; slug: string; path?: string }; final?: ChatMessage; error?: string } {
   switch (ev.type) {
     case 'text-delta': {
       const last = message.parts[message.parts.length - 1]
@@ -71,6 +71,8 @@ export function applyChatStreamEvent(message: ChatMessage, ev: ChatStreamEvent):
     case 'draft':
       message.parts.push({ type: 'draft', markdown: ev.markdown, summary: ev.summary })
       return { draft: { markdown: ev.markdown, summary: ev.summary } }
+    case 'saved':
+      return { saved: { kind: ev.kind, slug: ev.slug, path: ev.path } }
     case 'done':
       return { final: ev.message }
     case 'error':
@@ -121,6 +123,10 @@ export interface UseChatOptions {
   draft: Ref<string> | (() => string)
   /** Called when the AI updates the draft (update_draft / Gemini draft block) */
   onDraft?: (markdown: string, summary?: string) => void
+  /** Called when the AI saved a record itself (save_entity tool) */
+  onSaved?: (saved: { kind: EntityKind; slug: string; path?: string }) => void
+  /** Called after a stored conversation was restored, with the last AI draft in it (if any) */
+  onRestored?: (lastDraft: { markdown: string; summary?: string } | null) => void
   /** Load the latest conversation on mount (default true) */
   autoLoad?: boolean
 }
@@ -139,6 +145,22 @@ function draftStorageKey(kind: EntityKind) {
  * Bind the draft conversation of the "add" screen to the record it was just saved as, so that the
  * conversation shows up on the record page. Call right after the record is created, before navigating.
  */
+/** Forget the remembered draft conversation of the "add" screen (e.g. after the user discards the draft). */
+export function clearDraftChatSession(kind: EntityKind): void {
+  writeStored(draftStorageKey(kind), null)
+}
+
+function lastDraftOf(messages: ChatMessage[]): { markdown: string; summary?: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const parts = messages[i]!.parts
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const p = parts[j]!
+      if (p.type === 'draft') return { markdown: p.markdown, summary: p.summary }
+    }
+  }
+  return null
+}
+
 export async function bindDraftChatSession(kind: EntityKind, slug: string): Promise<void> {
   const key = draftStorageKey(kind)
   const id = readStored(key)
@@ -269,6 +291,7 @@ export function useChat(options: UseChatOptions) {
         }
         const r = applyChatStreamEvent(assistant, ev)
         if (r.draft) options.onDraft?.(r.draft.markdown, r.draft.summary)
+        if (r.saved) options.onSaved?.(r.saved)
         if (r.error) {
           gotTerminal = true
           fail(r.error)
@@ -312,11 +335,18 @@ export function useChat(options: UseChatOptions) {
   async function retry() {
     const text = lastUserText.value
     if (!text) return
-    // remove the failed exchange so it is not shown twice
+    // remove the failed exchange (locally and in the stored conversation) so it is not shown twice
     const lastUser = [...messages.value].reverse().find(m => m.role === 'user')
     if (lastUser) {
       const idx = messages.value.indexOf(lastUser)
+      const dropped = messages.value.slice(idx)
       messages.value = messages.value.slice(0, idx)
+      if (sessionId.value) {
+        await $fetch(`/api/chat/sessions/${encodeURIComponent(sessionId.value)}/messages`, {
+          method: 'DELETE',
+          body: { ids: dropped.map(m => m.id) },
+        }).catch(() => {})
+      }
     }
     status.value = 'ready'
     await send(text)
@@ -337,6 +367,7 @@ export function useChat(options: UseChatOptions) {
     if (token !== loadToken) return
     sessionId.value = data.session.id
     messages.value = data.messages
+    options.onRestored?.(lastDraftOf(data.messages))
   }
 
   /** Load the newest conversation of the current record (or the remembered draft conversation). */

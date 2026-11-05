@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { ChatMessage, ChatPart, ChatStreamEvent } from '../../../shared/types/chat'
+import type { EntityKind } from '../../../shared/types/entity'
 import type { McpBridge } from '../mcp-bridge'
 import { toolResultText } from '../mcp-bridge'
 import { toAnthropicMessages } from './history'
@@ -164,6 +165,10 @@ export async function runAnthropicAgent(opts: AnthropicAgentOptions): Promise<Ag
         part.isError = isError || undefined
         part.state = 'done'
         onEvent({ type: 'tool-result', toolCallId: use.id, name: use.name, output: eventOutput, isError: isError || undefined })
+        if (use.name === 'save_entity' && !isError) {
+          const saved = parseSavedResult(text)
+          if (saved) onEvent({ type: 'saved', ...saved })
+        }
 
         const content: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [
           { type: 'text', text: truncate(text, MODEL_TOOL_RESULT_LIMIT) || '(empty)' },
@@ -197,6 +202,19 @@ export async function runAnthropicAgent(opts: AnthropicAgentOptions): Promise<Ag
     onEvent({ type: 'error', message })
     return { parts, error: message }
   }
+}
+
+/** save_entity returns JSON like { ok, kind, slug, path }; extract what the UI needs. */
+function parseSavedResult(text: string): { kind: EntityKind; slug: string; path?: string } | null {
+  try {
+    const data = JSON.parse(text) as { ok?: boolean; kind?: string; slug?: string; path?: string }
+    if (data?.ok && typeof data.slug === 'string' && (data.kind === 'monks' || data.kind === 'temples' || data.kind === 'amulets')) {
+      return { kind: data.kind, slug: data.slug, path: data.path }
+    }
+  } catch {
+    // not JSON
+  }
+  return null
 }
 
 function markInterrupted(parts: ChatPart[]) {

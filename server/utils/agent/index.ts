@@ -69,7 +69,8 @@ export async function runChatTurn(
   } else {
     const apiKey = anthropicApiKey()
     if (!apiKey) throw createError({ statusCode: 400, message: NO_ANTHROPIC_KEY_MESSAGE })
-    const bridge = await createMcpBridge()
+    // The in-app assistant must not push to GitHub on its own; syncing is a user action in the sync panel.
+    const bridge = await createMcpBridge({ exclude: ['sync_data'] })
     try {
       const toolNames = [...bridge.tools.map(t => t.name), 'update_draft']
       const system = buildSystemPrompt({ kind: request.kind, slug: session.slug, draft: request.draft, settings, toolNames })

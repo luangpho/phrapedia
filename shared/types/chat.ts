@@ -50,5 +50,7 @@ export type ChatStreamEvent =
   | { type: 'tool-start'; toolCallId: string; name: string; input: unknown }
   | { type: 'tool-result'; toolCallId: string; name: string; output: unknown; isError?: boolean }
   | { type: 'draft'; markdown: string; summary?: string }
+  /** The AI saved a record through save_entity (the UI should refresh / navigate) */
+  | { type: 'saved'; kind: EntityKind; slug: string; path?: string }
   | { type: 'done'; message: ChatMessage }
   | { type: 'error'; message: string }

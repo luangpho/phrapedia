@@ -99,6 +99,14 @@ export async function deleteChatSession(id: string): Promise<boolean> {
 }
 
 /** Bump updated_at; optionally re-bind the session to a slug (after the draft was saved) or rename it. */
+/** Delete specific messages of a session. Returns the number of rows removed. */
+export async function deleteChatMessages(sessionId: string, ids: string[]): Promise<number> {
+  if (!ids.length) return 0
+  const db = await useDb()
+  const res = await db.query('DELETE FROM chat_messages WHERE session_id = $1 AND id = ANY($2::text[])', [sessionId, ids])
+  return res.affectedRows ?? 0
+}
+
 export async function touchChatSession(id: string, patch: { slug?: string | null; title?: string } = {}): Promise<void> {
   const db = await useDb()
   const sets = ['updated_at = now()']

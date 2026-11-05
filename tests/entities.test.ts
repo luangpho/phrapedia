@@ -80,7 +80,8 @@ ${extra}---
     const rec = await writeEntity('monks', 'somdet-to', sample('slug: wrong\nkind: temples\nstatus: bogus\n'))
     expect(rec.slug).toBe('somdet-to')
     expect(rec.kind).toBe('monks')
-    expect(rec.path).toBe('data/monks/somdet-to.md')
+    // path follows the configured data dir (absolute when it lies outside the project root)
+    expect(rec.path.endsWith('/monks/somdet-to.md')).toBe(true)
     expect(rec.frontmatter.slug).toBe('somdet-to')
     expect(rec.frontmatter.kind).toBe('monks')
     expect(rec.status).toBe('draft')
@@ -171,6 +172,30 @@ ${extra}---
     await deleteEntity('temples', 'wat-rakhang')
     expect(await entityExists('temples', 'wat-rakhang')).toBe(false)
     await expect(deleteEntity('temples', 'wat-rakhang')).rejects.toMatchObject({ statusCode: 404 })
+  })
+})
+
+describe('frontmatter list fields', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'phrapedia-test-'))
+    setTestDataDir(dir)
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('coerces scalar sources / aliases / tags to arrays', async () => {
+    const rec = await writeEntity('monks', 'scalar-lists', '---\nname: X\nsources: notes/x.md\naliases: Y\ntags: []\n---\n# X\n')
+    expect(rec.frontmatter.sources).toEqual(['notes/x.md'])
+    expect(rec.frontmatter.aliases).toEqual(['Y'])
+    expect(rec.frontmatter.tags).toEqual([])
+    const again = await getEntity('monks', 'scalar-lists')
+    expect(again?.frontmatter.sources).toEqual(['notes/x.md'])
+  })
+
+  it('rejects malformed percent-encoding in slugs with a 400', () => {
+    expect(() => assertSlug('%E0%A4%A')).toThrowError(/Invalid slug/)
   })
 })
 

@@ -42,9 +42,21 @@ export async function listSources(subdir = ''): Promise<SourceFile[]> {
     for (const e of entries) {
       if (e.name.startsWith('.') || IGNORED_DIRS.has(e.name)) continue
       const full = join(dir, e.name)
-      if (e.isDirectory()) {
+      let isDir = e.isDirectory()
+      let isFile = e.isFile()
+      if (e.isSymbolicLink()) {
+        // follow symlinks (stat resolves the target); dangling links are skipped
+        try {
+          const target = await stat(full)
+          isDir = target.isDirectory()
+          isFile = target.isFile()
+        } catch {
+          continue
+        }
+      }
+      if (isDir) {
         await walk(full)
-      } else if (e.isFile()) {
+      } else if (isFile) {
         const st = await stat(full)
         const ext = extname(e.name)
         out.push({

@@ -11,6 +11,32 @@ export function git(): SimpleGit {
   return simpleGit({ baseDir: projectRoot(), maxConcurrentProcesses: 1 })
 }
 
+/** Remote / branch names from settings are passed to git argv; refuse anything that could be read as an option. */
+function safeName(value: string | undefined, what: string): string | undefined {
+  if (!value) return undefined
+  if (!isSafeGitName(value)) throw createError({ statusCode: 400, statusMessage: 'Invalid git name', message: `${what} に使えない文字が含まれています: ${value}` })
+  return value
+}
+
+/** Drop user:password@ from a remote URL before it is shown in the UI. */
+function redactUrl(url: string | undefined): string | undefined {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    if (u.username || u.password) {
+      u.username = ''
+      u.password = ''
+    }
+    return u.toString()
+  } catch {
+    return url.replace(/\/\/[^/@]+@/, '//')
+  }
+}
+
+function isMissingRemoteRef(message: string): boolean {
+  return /couldn't find remote ref|no such ref was fetched|Couldn't find remote ref/i.test(message)
+}
+
 async function dataRelDir(): Promise<string> {
   const abs = await dataDir()
   const root = projectRoot()
@@ -30,9 +56,9 @@ export async function syncStatus(): Promise<SyncStatus> {
     const rel = await dataRelDir()
     const status = await g.status(['--', rel])
     const remotes = await g.getRemotes(true)
-    const remoteName = settings.git.remote || 'origin'
+    const remoteName = safeName(settings.git.remote, 'リモート名') || 'origin'
     const remote = remotes.find(r => r.name === remoteName) ?? remotes[0]
-    const branch = settings.git.branch || status.current || undefined
+    const branch = safeName(settings.git.branch, 'ブランチ名') || status.current || undefined
     let ahead = status.ahead
     let behind = status.behind
     if (remote && branch) {
@@ -55,7 +81,7 @@ export async function syncStatus(): Promise<SyncStatus> {
       isRepo: true,
       branch,
       remote: remote?.name,
-      remoteUrl: remote?.refs.fetch,
+      remoteUrl: redactUrl(remote?.refs.fetch),
       ahead,
       behind,
       changes: status.files.map(f => ({ path: f.path, status: `${f.index}${f.working_dir}`.trim() || '??' })),
@@ -94,13 +120,18 @@ export async function pullData(): Promise<SyncResult> {
   const st = await syncStatus()
   if (!st.isRepo) return { ok: false, action: 'pull', message: 'Gitリポジトリではありません' }
   if (!st.remote) return { ok: false, action: 'pull', message: 'リモートが設定されていません', status: st }
-  const branch = s.git.branch || st.branch
+  const branch = safeName(s.git.branch, 'ブランチ名') || st.branch
   if (!branch) return { ok: false, action: 'pull', message: 'ブランチを特定できません', status: st }
   try {
-    await g.pull(st.remote, branch, { '--rebase': 'true' })
+    // --autostash: files outside data/ may be modified (the app lives in the same repo); keep them out of the way.
+    await g.pull(st.remote, branch, { '--rebase': 'true', '--autostash': null })
     return { ok: true, action: 'pull', message: `${st.remote}/${branch} から取得しました`, status: await syncStatus() }
   } catch (err) {
     const m = (err as Error).message
+    if (isMissingRemoteRef(m)) {
+      // First sync: the branch does not exist on the remote yet. Nothing to pull; push will create it.
+      return { ok: true, action: 'pull', message: `リモートに ${branch} はまだありません（push で作成されます）`, status: st }
+    }
     try { await g.rebase(['--abort']) } catch { /* no rebase in progress */ }
     return { ok: false, action: 'pull', message: `取得に失敗しました: ${m}`, status: await syncStatus() }
   }
@@ -112,7 +143,7 @@ export async function pushData(): Promise<SyncResult> {
   const st = await syncStatus()
   if (!st.isRepo) return { ok: false, action: 'push', message: 'Gitリポジトリではありません' }
   if (!st.remote) return { ok: false, action: 'push', message: 'リモートが設定されていません', status: st }
-  const branch = s.git.branch || st.branch
+  const branch = safeName(s.git.branch, 'ブランチ名') || st.branch
   if (!branch) return { ok: false, action: 'push', message: 'ブランチを特定できません', status: st }
   try {
     await g.push(st.remote, branch, ['--set-upstream'])

@@ -71,3 +71,11 @@ describe('frontmatter', () => {
     expect(() => parseFrontmatter('---\n- a\n- b\n---\nbody')).toThrowError(/mapping/)
   })
 })
+
+describe('frontmatter edge cases', () => {
+  it('accepts an empty frontmatter block', () => {
+    const { data, body } = parseFrontmatter('---\n---\n# Title\n\nbody\n')
+    expect(data).toEqual({})
+    expect(body).toBe('# Title\n\nbody\n')
+  })
+})

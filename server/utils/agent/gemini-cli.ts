@@ -116,7 +116,7 @@ export async function runGeminiChat(opts: GeminiChatOptions): Promise<AgentRunRe
       ].join('\n'),
     ].join('\n\n')
 
-    const res = await runGemini({ prompt, noCache: true })
+    const res = await runGemini({ prompt, noCache: true, signal })
     if (signal?.aborted) return { parts, aborted: true }
 
     const { text, draft } = parseDraftBlock(res.text)

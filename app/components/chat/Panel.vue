@@ -12,7 +12,13 @@ const props = defineProps<{
   draft: string
 }>()
 
-const emit = defineEmits<{ draft: [markdown: string, summary?: string] }>()
+const emit = defineEmits<{
+  draft: [markdown: string, summary?: string]
+  /** The AI saved a record through save_entity */
+  saved: [saved: { kind: EntityKind; slug: string; path?: string }]
+  /** A stored conversation was restored; carries its last AI draft (null when none) */
+  restored: [lastDraft: { markdown: string; summary?: string } | null]
+}>()
 
 type ToolPart = Extract<ChatPart, { type: 'tool' }>
 type DraftPart = Extract<ChatPart, { type: 'draft' }>
@@ -24,6 +30,8 @@ const { messages, uiMessages, status, error, loading, send, stop, retry, reset }
   slug: () => props.slug,
   draft: () => props.draft,
   onDraft: (markdown, summary) => emit('draft', markdown, summary),
+  onSaved: saved => emit('saved', saved),
+  onRestored: last => emit('restored', last),
 })
 
 const { data: settings } = useSettings()

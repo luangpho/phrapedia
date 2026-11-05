@@ -1,6 +1,6 @@
 import YAML from 'yaml'
 
-const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/
+const FM_RE = /^---\r?\n(?:([\s\S]*?)\r?\n)?---\r?\n?([\s\S]*)$/
 
 export interface ParsedMarkdown<T = Record<string, unknown>> {
   data: T
@@ -14,7 +14,7 @@ export function parseFrontmatter<T = Record<string, unknown>>(raw: string): Pars
   if (!m) return { data: {} as T, body: text }
   let data: unknown
   try {
-    data = YAML.parse(m[1]!) ?? {}
+    data = YAML.parse(m[1] ?? '') ?? {}
   } catch (err) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid frontmatter', message: `YAML frontmatter could not be parsed: ${(err as Error).message}` })
   }
