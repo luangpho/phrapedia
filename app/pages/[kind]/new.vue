@@ -59,6 +59,7 @@ async function save() {
   saving.value = true
   try {
     const res = await create(kind.value, raw.value)
+    await bindDraftChatSession(kind.value, res.record.slug)
     toast.add({ title: '保存しました', description: res.record.path, icon: 'i-lucide-check', color: 'success' })
     skipGuard = true
     baseline.value = raw.value

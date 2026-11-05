@@ -135,6 +135,22 @@ function draftStorageKey(kind: EntityKind) {
   return `phrapedia:chat:${kind}:draft-session`
 }
 
+/**
+ * Bind the draft conversation of the "add" screen to the record it was just saved as, so that the
+ * conversation shows up on the record page. Call right after the record is created, before navigating.
+ */
+export async function bindDraftChatSession(kind: EntityKind, slug: string): Promise<void> {
+  const key = draftStorageKey(kind)
+  const id = readStored(key)
+  if (!id) return
+  try {
+    await $fetch(`/api/chat/sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: { slug } })
+  } catch {
+    // the session may already be gone; nothing to bind
+  }
+  writeStored(key, null)
+}
+
 function readStored(key: string): string | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage.getItem(key)

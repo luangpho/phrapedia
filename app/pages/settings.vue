@@ -18,6 +18,12 @@ watch(view, (v) => {
   loaded.value = true
 }, { immediate: true })
 
+const approvalModeItems = [
+  { label: 'auto_edit（推奨）', value: 'auto_edit' },
+  { label: 'default（web_fetch 不可）', value: 'default' },
+  { label: 'yolo（全ツール許可・非推奨）', value: 'yolo' },
+]
+
 const argsText = computed({
   get: () => state.gemini.args.join('\n'),
   set: (v: string) => { state.gemini.args = v.split('\n').map(s => s.trim()).filter(Boolean) },
@@ -177,6 +183,9 @@ async function onReindex() {
                   <UInput v-model="state.gemini.model" class="w-full font-mono" placeholder="gemini-2.5-pro" />
                 </UFormField>
               </div>
+              <UFormField label="承認モード" name="gemini.approvalMode" description="ヘッドレス実行時のツール承認。Google 検索は常に許可。auto_edit で web_fetch も許可（推奨）。yolo はシェル等も許可するため非推奨">
+                <USelect v-model="state.gemini.approvalMode" :items="approvalModeItems" class="w-full sm:w-72" />
+              </UFormField>
               <UFormField label="追加引数" name="gemini.args" description="1 行に 1 つ">
                 <UTextarea v-model="argsText" :rows="3" autoresize class="w-full" :ui="{ base: 'font-mono text-sm' }" />
               </UFormField>
