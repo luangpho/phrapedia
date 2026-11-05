@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+@plugin "@tailwindcss/typography";
+
+@theme static {
+  --font-sans: 'Inter', 'Noto Sans JP', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Minimal, calm tone: subtle radii and shadows. */
+:root {
+  --ui-radius: 0.375rem;
+}
+
+/* Markdown rendering (record body) */
+.phra-prose {
+  @apply prose prose-zinc dark:prose-invert max-w-none;
+  @apply prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-primary prose-img:rounded-md;
+  @apply prose-table:text-sm;
+}
