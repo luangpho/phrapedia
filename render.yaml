@@ -1,0 +1,45 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# One-time setup: Render dashboard → New → Blueprint → select this repository → branch "render".
+# After that every push to the "render" branch triggers a deploy (autoDeploy).
+services:
+  - type: web
+    name: phrapedia
+    runtime: node
+    plan: starter            # a persistent disk (below) needs a paid instance; drop "disk" to try the free plan (data is then lost on each deploy)
+    region: singapore        # closest region to Thailand/Japan; change as you like
+    branch: render
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: node scripts/render-start.mjs
+    healthCheckPath: /api/health
+    disk:
+      name: phrapedia-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Records / primary sources / PGlite live on the persistent disk (seeded from the repo on first start)
+      - key: NUXT_DATA_DIR
+        value: /var/data/data
+      - key: NUXT_SOURCES_DIR
+        value: /var/data/sources
+      - key: NUXT_STATE_DIR
+        value: /var/data/state
+      # Gemini CLI is installed as an npm dependency; GEMINI_API_KEY must be set in the dashboard
+      - key: NUXT_GEMINI_COMMAND
+        value: /opt/render/project/src/node_modules/.bin/gemini
+      - key: GEMINI_CLI_HOME
+        value: /var/data/gemini-home
+      # Secrets — set these in the Render dashboard (sync: false = never stored in this file)
+      - key: NUXT_ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Basic authentication for the public URL (strongly recommended: the app has no login of its own)
+      - key: NUXT_BASIC_AUTH_USER
+        sync: false
+      - key: NUXT_BASIC_AUTH_PASSWORD
+        sync: false

@@ -19,10 +19,11 @@
 5. [画面の流れ](#画面の流れ)
 6. [設定リファレンス](#設定リファレンス)
 7. [Git 同期](#git-同期)
-8. [MCP で使う](#mcp-で使う)
-9. [開発コマンド](#開発コマンド)
-10. [トラブルシューティング](#トラブルシューティング)
-11. [ロードマップ](#ロードマップ)
+8. [Render へデプロイ](#render-へデプロイ)
+9. [MCP で使う](#mcp-で使う)
+10. [開発コマンド](#開発コマンド)
+11. [トラブルシューティング](#トラブルシューティング)
+12. [ロードマップ](#ロードマップ)
 
 ---
 
@@ -169,6 +170,32 @@ API キーは画面からは設定できません（ブラウザに渡さない�
 - コンフリクトが起きた場合はアプリは自動解決しません。ターミナルで通常の Git 操作で解決してください。
 - データフォルダをリポジトリ外に設定した場合、同期機能は使えません。
 - 一次資料（`sources/`）を共有したい場合は、自分で Git 管理するか別の手段（クラウドドライブ等）を使ってください。
+
+## Render へデプロイ
+
+`render.yaml`（Blueprint）を同梱しています。**`render` ブランチへの push で自動デプロイ**される構成です。
+
+初回だけ Render ダッシュボードで行う作業:
+
+1. Render → **New → Blueprint** → この GitHub リポジトリを選択 → ブランチに **`render`** を指定して作成。
+   `render.yaml` の内容（Web サービス `phrapedia`、永続ディスク `/var/data`、環境変数）が読み込まれます。
+2. Environment で秘密情報を設定: `NUXT_ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`NUXT_BASIC_AUTH_USER` / `NUXT_BASIC_AUTH_PASSWORD`（Basic 認証。公開 URL になるため必ず設定）。
+3. 以後は `render` ブランチを更新するだけでデプロイが走ります。
+
+```bash
+git checkout render && git merge <作業ブランチ> && git push origin render
+```
+
+構成のポイント:
+
+| 項目 | 内容 |
+|---|---|
+| ビルド / 起動 | `npm ci && npm run build` / `node scripts/render-start.mjs`（初回起動時に `data/`・`sources/` のサンプルを永続ディスクへコピーしてからサーバを起動） |
+| データの置き場所 | `NUXT_DATA_DIR=/var/data/data`、`NUXT_SOURCES_DIR=/var/data/sources`、`NUXT_STATE_DIR=/var/data/state`（デプロイしてもレコードと PGlite が消えない） |
+| Gemini CLI | npm 依存として同梱（`node_modules/.bin/gemini`）。`GEMINI_API_KEY` で認証、`GEMINI_CLI_HOME=/var/data/gemini-home` |
+| 認証 | `NUXT_BASIC_AUTH_USER` と `NUXT_BASIC_AUTH_PASSWORD` を両方設定すると全ページ・API・`/mcp` に Basic 認証がかかる（`/api/health` は除外）。MCP クライアントからは `Authorization: Basic ...` ヘッダで接続 |
+| プラン | 永続ディスクは有料インスタンス（starter 以上）が必要。無料で試す場合は `render.yaml` の `disk:` と `/var/data` 系の環境変数を外す（その場合データはデプロイごとに失われる） |
+| Git 同期 | Render 上のデータフォルダはリポジトリ外（永続ディスク）なので同期パネルは使えません。一次資料の追加はサーバ上のディスクに直接置くか、ローカルで編集して Render の Shell / SFTP で転送してください。ローカル運用では従来どおり使えます |
 
 ## MCP で使う
 
