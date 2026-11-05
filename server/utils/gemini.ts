@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 export interface GeminiRunOptions {
   /** Prompt sent with -p */
@@ -64,17 +66,26 @@ export async function runGemini(opts: GeminiRunOptions): Promise<GeminiRunResult
     }
   }
 
+  // The prompt itself is sent on stdin (no argv length limit); `-p` carries a short trailer which also
+  // forces headless mode. The CLI prepends stdin content, then a blank line, then the -p text.
   const args: string[] = []
   if (model) args.push('-m', model)
   args.push(...(s.gemini.args ?? []))
   if (!args.includes('--output-format')) args.push('--output-format', 'json')
-  args.push('-p', opts.prompt)
+  if (!args.includes('--approval-mode') && !args.includes('--yolo') && !args.includes('-y')) {
+    args.push('--approval-mode', s.gemini.approvalMode || 'auto_edit')
+  }
+  if (!args.includes('--skip-trust')) args.push('--skip-trust')
+  args.push('-p', '上記の指示に従って回答してください。')
 
   const started = Date.now()
-  const { stdout, stderr, code } = await run(command, args, { timeoutMs })
+  const { stdout, stderr, code } = await run(command, args, { timeoutMs, stdin: opts.prompt })
   const durationMs = Date.now() - started
   if (code !== 0 && !stdout.trim()) {
-    throw createError({ statusCode: 502, statusMessage: 'Gemini CLI failed', message: `gemini exited with code ${code}: ${stderr.trim().slice(0, 2000)}` })
+    const hint = code === 41
+      ? ' (認証エラー: GEMINI_API_KEY を設定するか、このマシンで一度 `gemini` を実行してログインしてください)'
+      : code === 42 ? ' (入力エラー)' : ''
+    throw createError({ statusCode: 502, statusMessage: 'Gemini CLI failed', message: `gemini exited with code ${code}${hint}: ${stderr.trim().slice(-2000)}` })
   }
   const text = unwrapGeminiOutput(stdout)
   if (!text.trim()) {
@@ -113,13 +124,25 @@ export function unwrapGeminiOutput(stdout: string): string {
   return trimmed
 }
 
-function run(command: string, args: string[], opts: { timeoutMs: number }): Promise<{ stdout: string; stderr: string; code: number | null }> {
+function run(command: string, args: string[], opts: { timeoutMs: number; stdin?: string }): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolvePromise, reject) => {
+    // Run inside an empty work dir so the project's own GEMINI.md / .gemini settings are not picked up.
+    const cwd = join(stateDir(), 'gemini-work')
+    mkdirSync(cwd, { recursive: true })
     const child = spawn(command, args, {
-      cwd: projectRoot(),
-      env: { ...process.env, NO_COLOR: '1', CI: '1', GEMINI_CLI_NO_RELAUNCH: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd,
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+        CI: 'true',
+        GEMINI_CLI_NO_RELAUNCH: '1',
+        GEMINI_CLI_TRUST_WORKSPACE: 'true',
+        GEMINI_CLI_SURFACE: 'phrapedia',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
+    child.stdin.on('error', () => { /* child exited early */ })
+    child.stdin.end(opts.stdin ?? '')
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {

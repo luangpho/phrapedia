@@ -17,8 +17,13 @@ export interface AppSettings {
     command: string
     /** Extra CLI arguments inserted before the prompt (e.g. ["-m", "gemini-2.5-pro"]) */
     args: string[]
-    /** Model passed with -m. Empty = CLI default. */
+    /** Model passed with -m (e.g. "flash", "pro", "gemini-2.5-pro"). Empty = CLI default ("auto"). */
     model: string
+    /**
+     * Gemini CLI approval mode. In headless mode google_web_search is always allowed; web_fetch is denied under
+     * "default" and allowed under "auto_edit" / "yolo". "yolo" also allows shell/file tools, so prefer "auto_edit".
+     */
+    approvalMode: 'default' | 'auto_edit' | 'yolo'
     timeoutMs: number
     /** Cache web research results for this many hours (0 = no cache) */
     cacheHours: number
@@ -48,6 +53,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     command: 'gemini',
     args: [],
     model: '',
+    approvalMode: 'auto_edit',
     timeoutMs: 180_000,
     cacheHours: 24,
   },
