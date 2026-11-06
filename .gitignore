@@ -18,3 +18,4 @@ logs
 # Tauri desktop client
 .output-frontend
 src-tauri/target
+src-tauri/gen
