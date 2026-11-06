@@ -114,3 +114,30 @@ updated_at: 2026-11-05T00:00:00.000Z
 // Claude Code: .mcp.json / Antigravity CLI: `agy mcp add` または ~/.gemini/config/mcp_config.json / Gemini CLI: ~/.gemini/settings.json
 { "mcpServers": { "phrapedia": { "httpUrl": "http://localhost:3000/mcp" } } }
 ```
+
+## デスクトップクライアント（Tauri v2）
+
+`src-tauri/` が Nuxt をネイティブ WebView に載せる。CLI 起動（`npm run dev` / `npm start`）と Render デプロイは従来どおり。
+
+- **フロント**: `PHRAPEDIA_TAURI=1 nuxt generate`（`npm run generate:tauri`）で SPA（`ssr:false`）を `.output-frontend` に出力し、WebView が読む。
+- **サーバ**: 既存 Nitro（`.output/server/index.mjs`）を Rust が sidecar として子プロセス起動する。`127.0.0.1` の空きポートを割り当て、フロントはそのポートの API を叩く。Node は `PATH` 上の `node`（Homebrew 前提）。
+- **終了処理**: sidecar は専用プロセスグループで起動し、アプリ終了時にグループごと kill する。保険として `server/plugins/parent-watch.ts` が `PHRAPEDIA_PARENT_PID` の消滅を検知して自己終了する。
+- **起動**: `npm run tauri:dev` / `npm run tauri:build`（macOS バイナリは GitHub Actions で作る）。
+
+### 2 つのパス設定
+
+| 設定 | 意味 | 既定 | sidecar への渡し方 |
+|---|---|---|---|
+| データセットパス | `monks/` `temples/` `amulets/` の Markdown と `sources/` の読み出し元（`data/` 相当） | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 保存・削除・リネーム先、および git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
+
+- 保存先: Tauri app config dir の `settings.json`。再起動後も保持する。読み書きは Tauri command（`get_path_settings` / `save_path_settings` など）。フォルダ選択は `tauri-plugin-dialog`。
+- 受け口: `server/utils/paths.ts` の `datasetRoot()` / `exportRoot()`。環境変数が無い（CLI）場合は従来のプロジェクトルートと同一で挙動は変わらない。
+- 検証: 「存在しない」「ディレクトリでない」「書き込めない（書き出し先）」を検出し、UI（設定ページとエラーバナー）に表示する。**不正パスでもアプリと sidecar は落とさず起動**し、該当 API は 409 を返す。
+
+### 読み書きと git 同期の規則
+
+1. 読み出し: データセット側を基準に、書き出し先に同 slug のファイルがあればそちらを優先する（書き出し先の方が新しい）。一覧はデータセット → 書き出し先の順にマージする。
+2. 書き込み: 常に書き出し先へ。データセット側のファイルは変更・移動・削除しない（読み取り専用でも使える）。
+3. **git 操作の対象は書き出し先**。`simple-git` の baseDir を書き出し先とし、`data` ディレクトリ（書き出し先配下）だけを自動ステージする。書き出し先が git リポジトリでない、または data が書き出し先の外にある場合は 400 を返す。
+4. 書き出し先 = データセットパスの場合は従来と同じ（読み出し元を直接 git 管理する）。
