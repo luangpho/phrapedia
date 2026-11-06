@@ -61,19 +61,20 @@
 | 4 | info | アプリが SIGKILL された場合、`parent-watch` で node は最大 3 秒で終了するが、node の子（`agy` 等）は残りうる | 未修正（影響小。下記） |
 | 5 | info | `safeJoin` は字句的検証のみ。`sources/` 内の symlink が外を指す場合は辿る（データセットはユーザー選択パスのため許容範囲） | 未修正（server/ は最小修正方針） |
 | 6 | info | CSP の `script-src` に `'unsafe-eval'`（Nuxt dev 用の可能性）。本番で必要かは未検証 | 未修正 |
+| 7 | medium | A 案確定（root 直下に `data/<kind>/` と `sources/`）後も README の設定表（「`data/` 相当のフォルダ」「直下に `monks/`」）と設定画面の説明文が B のまま。`exportDataDir()` の A 配置を検証するテストも無かった | 済（README・`PathsCard.vue` を A に統一、`tests/layout.test.ts` 追加。ARCHITECTURE / CLAUDE.md / 本レポートは A で一貫を確認） |
 
 観点別の結論: slug は `assertSlug`（`/` `\` `.` 先頭を拒否）、`sources/` は `safeJoin` で検証済み。設定ファイル破損は既定値 + 警告で起動継続（テストあり）。書込不可の書き出し先は実書込プローブで検出。Node 不在は起動失敗としてエラーバナー表示。cask / workflow / `tauri.conf.json` は整合（`productName` Phrapedia、version 0.1.0、identifier `jp.grrow.phrapedia`、成果物 `Phrapedia_<version>_{aarch64,x64}.dmg`、sha256 は `update-cask.mjs` が dmg から計算して埋める、arch 切替は `arch arm:/intel:`）。`render.yaml` / `scripts/render-start.mjs` は無変更、CLI 起動（env 未設定）は従来どおり動作。
 
 ### テスト結果
-- `npm ci` OK / `npm test` 57 passed / `npm run typecheck` exit 0（vue-tsc の `vue-router/volar` 解決警告のみ）/ `npx nuxt generate`（`generate:tauri`）OK
+- `npm ci` OK / `npm test` 61 passed（`tests/layout.test.ts` 4 件追加）/ `npm run typecheck` exit 0（vue-tsc の `vue-router/volar` 解決警告のみ）/ `npx nuxt generate`（`generate:tauri`）OK
 - `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 12 passed（修正で 1 件追加）
 - `npm run tauri:build` 成功（Linux: deb / rpm / AppImage）
-- `actionlint .github/workflows/release.yml` エラー 0
-- 手動（`.output/server` を env で直接起動）: 2 パス指定（データセット root 配下に `data/monks/`）で `/api/health` ok、`/api/entities/monks` 200。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
+- `actionlint .github/workflows/release.yml` エラー 0（初回確認時。以降 release.yml は無変更。バイナリ再取得は権限拒否のため再実行せず）
+- 手動（`.output/server` を env で直接起動）: 2 パス指定（各 root。データセット側に `data/monks/` と `sources/`）で `/api/health` ok、`/api/entities/monks` 200、POST で作成したレコードは書き出し先 `<export>/data/monks/` にのみ出力（データセット側は無変更）。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
 
 ### 未解決
 - macOS 実機・ワークフロー実走・`brew audit` は未確認（Linux 環境のため）。dmg 名は初回タグで要確認。
-- #4〜#6（上記）。GUI 操作の目視確認も未実施。
+- #4〜#6（上記）。GUI 操作の目視確認も未実施。review worker の後始末: `rm -rf` / 一部 `find -delete` は権限で拒否されるため、`w-review/` 配下の clone・生成物・`/tmp/rv-*.log` は残存しうる。
 
 ## docs 文言・不要ファイル整理（仕上げ）
 
