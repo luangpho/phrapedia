@@ -6,7 +6,7 @@ const { data: status, changeCount, refresh, running } = useSync()
 
 const label = computed(() => {
   if (!status.value) return 'Git 同期'
-  if (!status.value.isRepo) return 'Git 未設定'
+  if (!status.value.isRepo) return 'Git 管理外'
   if (changeCount.value) return `未コミット ${changeCount.value}`
   if (status.value.ahead) return `未プッシュ ${status.value.ahead}`
   return '同期済み'

@@ -103,6 +103,7 @@ async function configureAuthor(g: SimpleGit): Promise<void> {
 /** Stage data/ and commit. Returns ok=false (not an error) when there is nothing to commit. */
 export async function commitData(message?: string): Promise<SyncResult> {
   const g = git()
+  if (!(await g.checkIsRepo())) return { ok: false, action: 'commit', message: 'Git 管理外です（Gitリポジトリではありません）' }
   const rel = await dataRelDir()
   await configureAuthor(g)
   await g.add([rel])
