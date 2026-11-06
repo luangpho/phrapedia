@@ -47,3 +47,30 @@
 - `.app.tar.gz` は tauri-action ではなく自前で作成（updater 鍵なしだと tauri は生成しないため）。
 - 初回リリース前に `luangpho/homebrew-tap` の作成と `HOMEBREW_TAP_TOKEN` の登録が必要（README 参照）。署名 secret 未設定だと Gatekeeper 警告あり。
 - GUI 起動のアプリはシェル環境変数（`NUXT_ANTHROPIC_API_KEY` 等）を引き継がない可能性。sidecar は Rust 側の env を継承するだけで `.env` は読まない。実機（macOS）で要確認。
+
+## レビュー (review worker)
+
+対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体（基点 c818934 以降）。
+
+### 指摘一覧
+| # | severity | 内容 | 修正 |
+|---|---|---|---|
+| 1 | medium | パス設定が相対パス / `~` を受理。Rust 側は app の cwd、sidecar は別 cwd で解決するため検証と実体がずれる | 済 `4d01e9b`（絶対パス必須、テスト追加） |
+| 2 | low | sidecar 起動判定が「ポートに繋がる」だけ。`free_port()` と listen の間に他プロセスが同ポートを取ると false ready になる | 済 `09ca423`（接続成功後に子プロセス生存を再確認、テスト追加） |
+| 3 | low | リリースビルドでも CORS 許可 origin に `http://localhost:1420`（dev サーバ）が含まれる | 済 `09ca423`（debug ビルドのみ） |
+| 4 | info | アプリが SIGKILL された場合、`parent-watch` で node は最大 3 秒で終了するが、node の子（`agy` 等）は残りうる | 未修正（影響小。下記） |
+| 5 | info | `safeJoin` は字句的検証のみ。`sources/` 内の symlink が外を指す場合は辿る（データセットはユーザー選択パスのため許容範囲） | 未修正（server/ は最小修正方針） |
+| 6 | info | CSP の `script-src` に `'unsafe-eval'`（Nuxt dev 用の可能性）。本番で必要かは未検証 | 未修正 |
+
+観点別の結論: slug は `assertSlug`（`/` `\` `.` 先頭を拒否）、`sources/` は `safeJoin` で検証済み。設定ファイル破損は既定値 + 警告で起動継続（テストあり）。書込不可の書き出し先は実書込プローブで検出。Node 不在は起動失敗としてエラーバナー表示。cask / workflow / `tauri.conf.json` は整合（`productName` Phrapedia、version 0.1.0、identifier `jp.grrow.phrapedia`、成果物 `Phrapedia_<version>_{aarch64,x64}.dmg`、sha256 は `update-cask.mjs` が dmg から計算して埋める、arch 切替は `arch arm:/intel:`）。`render.yaml` / `scripts/render-start.mjs` は無変更、CLI 起動（env 未設定）は従来どおり動作。
+
+### テスト結果
+- `npm ci` OK / `npm test` 58 passed / `npm run typecheck` exit 0（vue-tsc の `vue-router/volar` 解決警告のみ）/ `npx nuxt generate`（`generate:tauri`）OK
+- `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 12 passed（修正で 1 件追加）
+- `npm run tauri:build` 成功（Linux: deb / rpm / AppImage）
+- `actionlint .github/workflows/release.yml` エラー 0
+- 手動（`.output/server` を env で直接起動）: 2 パス指定で `/api/health` ok、`/api/entities/monks` 200（データセット側の内容）。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
+
+### 未解決
+- macOS 実機・ワークフロー実走・`brew audit` は未確認（Linux 環境のため）。dmg 名は初回タグで要確認。
+- #4〜#6（上記）。GUI 操作の目視確認も未実施。
