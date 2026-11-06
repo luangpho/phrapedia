@@ -74,3 +74,12 @@
 ### 未解決
 - macOS 実機・ワークフロー実走・`brew audit` は未確認（Linux 環境のため）。dmg 名は初回タグで要確認。
 - #4〜#6（上記）。GUI 操作の目視確認も未実施。
+
+## docs 文言・不要ファイル整理（仕上げ）
+
+- README の設定リファレンス表（データセットパス / 書き出し先パス）を A 案（直下に `data/<kind>/` と `sources/` を持つ root）の文言に修正。
+- `data/.{0,4}相当|直下に.{0,6}monks` を README / CLAUDE.md / docs / app で全数確認。残りは本 report の A 案文脈（19 行目）のみ。
+- 既定値（アプリデータ dir 配下 `dataset`、書き出し先 = データセットと同じ）は `src-tauri/src/lib.rs` の `resolve_paths` と一致。
+- `src-tauri/icons/android` `ios` を削除（`tauri.conf.json` の `bundle.icon` は参照なし）。
+- `src-tauri/gen/` は `tauri build` / `cargo check` が自動生成する schema のため `.gitignore` に追加し追跡解除（残す必要なし）。
+- 検証: `npm test` 57 passed / `npm run typecheck` exit 0 / `cargo check` 成功。
