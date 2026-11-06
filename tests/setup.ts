@@ -47,6 +47,13 @@ export function setTestDataDir(dir: string): void {
   testDataDir = dir
 }
 g.dataDir = async () => testDataDir
+g.exportDataDir = async () => testDataDir
 g.sourcesDir = async () => testDataDir
 g.getSettings = async () => { throw new Error('getSettings is not available in unit tests') }
 g.useDb = async () => { throw new Error('useDb is not available in unit tests') }
+
+const pathValidation = await import('../server/utils/path-validation')
+g.assertDatasetUsable = pathValidation.assertDatasetUsable
+g.assertExportUsable = pathValidation.assertExportUsable
+g.datasetRoot = paths.datasetRoot
+g.exportRoot = paths.exportRoot
