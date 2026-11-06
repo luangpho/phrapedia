@@ -63,13 +63,13 @@ async function save() {
       <h2 class="font-semibold text-highlighted flex items-center gap-2"><UIcon name="i-lucide-folder-cog" class="size-4" />データの場所（デスクトップ版）</h2>
     </template>
     <form class="space-y-4" @submit.prevent="save">
-      <UFormField label="データセットパス" name="datasetPath" description="data/<種類>/ のレコードと sources/ を含むフォルダ（読み出し元）" :error="datasetError ?? undefined" required>
+      <UFormField label="データセットパス" name="datasetPath" description="data/<種類>/ のレコードと sources/ を直下に持つ root フォルダ（読み出し元。リポジトリの clone をそのまま指定可）" :error="datasetError ?? undefined" required>
         <div class="flex gap-2">
           <UInput v-model="datasetPath" class="w-full font-mono" aria-label="データセットパス" />
           <UButton color="neutral" variant="outline" icon="i-lucide-folder-open" label="選択" @click="pick('dataset')" />
         </div>
       </UFormField>
-      <UFormField label="書き出し先パス" name="exportPath" description="保存したレコードの書き込み先（Git 同期の対象）。空欄 = データセットパスと同じ" :error="exportError ?? undefined">
+      <UFormField label="書き出し先パス" name="exportPath" description="保存したレコードの書き込み先 root（同じ配置の data/<種類>/。Git 同期の対象）。空欄 = データセットパスと同じ" :error="exportError ?? undefined">
         <div class="flex gap-2">
           <UInput v-model="exportPath" class="w-full font-mono" placeholder="（データセットパスと同じ）" aria-label="書き出し先パス" />
           <UButton color="neutral" variant="outline" icon="i-lucide-folder-open" label="選択" @click="pick('export')" />

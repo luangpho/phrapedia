@@ -200,7 +200,7 @@ brew install --cask phrapedia
 | データセットパス | 読み出し元。直下に `data/<kind>/`（monks, temples, amulets）と `sources/` を持つ root。リポジトリの clone をそのまま指定できる | アプリデータ dir 配下 `dataset` | `PHRAPEDIA_DATASET_PATH` |
 | 書き出し先パス | 書き込み先。同じ配置の root。Git 同期の対象（git リポジトリの時のみ） | データセットパスと同じ | `PHRAPEDIA_EXPORT_PATH` |
 
-存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
+絶対パスでない・存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
 
 API キーは画面からは設定できません（ブラウザに渡さないため）。`.env` の `NUXT_ANTHROPIC_API_KEY`（または `ANTHROPIC_API_KEY`）、`GEMINI_API_KEY` を使います。そのほか `NUXT_STATE_DIR`（PGlite の場所、既定 `.phrapedia`）、`PHRAPEDIA_ROOT`（プロジェクトルート、既定はカレントディレクトリ）があります。
 
