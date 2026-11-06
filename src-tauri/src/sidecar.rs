@@ -8,7 +8,11 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// Origins of the Tauri WebView that the sidecar must accept cross-origin (see server/middleware/cors.ts).
+#[cfg(debug_assertions)]
 pub const WEBVIEW_ORIGINS: &str = "tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost:1420";
+/// Release builds do not allow the dev server origin (localhost:1420): any local page there could call the API.
+#[cfg(not(debug_assertions))]
+pub const WEBVIEW_ORIGINS: &str = "tauri://localhost,http://tauri.localhost,https://tauri.localhost";
 
 #[derive(Debug, Clone)]
 pub struct SidecarConfig {
@@ -99,6 +103,12 @@ impl Sidecar {
                 return Err(format!("サーバーが起動直後に終了しました ({status})\n{}", log_tail(log_file)));
             }
             if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
+                // The port was picked before node bound it: if something else grabbed it meanwhile, our node dies
+                // with EADDRINUSE right after. Confirm it is still alive before reporting ready.
+                std::thread::sleep(Duration::from_millis(300));
+                if let Ok(Some(status)) = self.child.try_wait() {
+                    return Err(format!("サーバーが起動直後に終了しました ({status})\n{}", log_tail(log_file)));
+                }
                 return Ok(());
             }
             if Instant::now() >= deadline {
@@ -253,6 +263,18 @@ http.createServer((req, res) => res.end(JSON.stringify({
         let err = Sidecar::start(&c, Duration::from_secs(15)).err().expect("must fail");
         assert!(err.contains("終了"), "{err}");
         assert!(err.contains("boom-xyz"), "{err}");
+    }
+
+    #[test]
+    fn exit_right_after_listening_is_not_reported_ready() {
+        if node().is_none() {
+            return;
+        }
+        let d = tempfile::tempdir().unwrap();
+        let script = "import http from \"node:http\"; const s = http.createServer(() => {}).listen(Number(process.env.NITRO_PORT), \"127.0.0.1\"); setTimeout(() => process.exit(1), 100)";
+        let c = cfg(d.path(), script);
+        let err = Sidecar::start(&c, Duration::from_secs(15)).err().expect("must fail");
+        assert!(err.contains("終了"), "{err}");
     }
 
     #[test]
