@@ -118,14 +118,14 @@ async function onReindex() {
               </div>
             </template>
             <div class="space-y-4">
-              <UFormField label="一次資料フォルダ" name="sourcesDir" description="絶対パス、またはプロジェクトからの相対パス（デスクトップ版はデータセットパス直下の sources/ 固定）" required>
-                <UInput v-model="state.sourcesDir" class="w-full" placeholder="sources" :disabled="isDesktop" />
+              <UFormField label="一次資料フォルダ" name="sourcesDir" description="絶対パス、またはプロジェクトからの相対パス" required>
+                <UInput v-model="state.sourcesDir" class="w-full" placeholder="sources" />
                 <template #help>
                   <span v-if="view?.resolved" class="font-mono text-xs text-muted break-all">{{ view.resolved.sourcesDir }}</span>
                 </template>
               </UFormField>
-              <UFormField label="データフォルダ" name="dataDir" description="data/<種類>/<slug>.md を保存する場所（Git 管理）（デスクトップ版はデータセット／書き出し先パスで指定）" required>
-                <UInput v-model="state.dataDir" class="w-full" placeholder="data" :disabled="isDesktop" />
+              <UFormField label="データフォルダ" name="dataDir" description="data/<種類>/<slug>.md を保存する場所（Git 管理）" required>
+                <UInput v-model="state.dataDir" class="w-full" placeholder="data" />
                 <template #help>
                   <span v-if="view?.resolved" class="font-mono text-xs text-muted break-all">{{ view.resolved.dataDir }}</span>
                 </template>

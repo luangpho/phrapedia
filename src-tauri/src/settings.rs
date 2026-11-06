@@ -10,7 +10,7 @@ pub const SETTINGS_FILE: &str = "settings.json";
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathSettings {
-    /// data/ equivalent directory: <kind>/*.md and sources/ directly inside (read side).
+    /// Directory holding data/<kind>/*.md and sources/ (read side).
     #[serde(default)]
     pub dataset_path: Option<String>,
     /// Directory records are written to (and the git working tree). None / empty = same as dataset_path.
