@@ -8,7 +8,9 @@ import type { SyncResult, SyncStatus } from '../../shared/types/sync'
  * Only the data directory is ever staged automatically.
  */
 export function git(): SimpleGit {
-  return simpleGit({ baseDir: projectRoot(), maxConcurrentProcesses: 1 })
+  assertExportUsable()
+  // The git working tree is the export path (where records are written); equals the project root in CLI mode.
+  return simpleGit({ baseDir: exportRoot(), maxConcurrentProcesses: 1 })
 }
 
 /** Remote / branch names from settings are passed to git argv; refuse anything that could be read as an option. */
@@ -38,10 +40,10 @@ function isMissingRemoteRef(message: string): boolean {
 }
 
 async function dataRelDir(): Promise<string> {
-  const abs = await dataDir()
-  const root = projectRoot()
+  const abs = await exportDataDir()
+  const root = exportRoot()
   if (!isInside(root, abs)) {
-    throw createError({ statusCode: 400, statusMessage: 'Data directory outside repository', message: `${abs} is not inside ${root}; git sync only works when dataDir is inside the project repository.` })
+    throw createError({ statusCode: 400, statusMessage: 'Data directory outside repository', message: `${abs} is not inside ${root}; git sync only works when dataDir is inside the export path (repository).` })
   }
   const rel = abs.slice(root.length).replace(/^[\\/]+/, '')
   return toPosix(rel) || '.'
@@ -101,6 +103,7 @@ async function configureAuthor(g: SimpleGit): Promise<void> {
 /** Stage data/ and commit. Returns ok=false (not an error) when there is nothing to commit. */
 export async function commitData(message?: string): Promise<SyncResult> {
   const g = git()
+  if (!(await g.checkIsRepo())) return { ok: false, action: 'commit', message: 'Git 管理外です（Gitリポジトリではありません）' }
   const rel = await dataRelDir()
   await configureAuthor(g)
   await g.add([rel])

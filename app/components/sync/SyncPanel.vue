@@ -57,7 +57,7 @@ function formatDate(d?: string) {
       color="warning"
       variant="subtle"
       icon="i-lucide-git-branch"
-      title="Git リポジトリではありません"
+      title="Git 管理外"
       :description="status.error || 'データディレクトリが Git 管理されていないため同期できません。git init とリモート設定を行ってください。'"
     />
 

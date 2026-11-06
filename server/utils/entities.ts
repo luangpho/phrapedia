@@ -26,12 +26,34 @@ export function assertSlug(slug: string | undefined): string {
 
 export async function kindDir(kind: EntityKind): Promise<string> {
   const dir = join(await dataDir(), kind)
+  // best effort: the dataset side may be read-only; reads cope with a missing directory
+  await mkdir(dir, { recursive: true }).catch(() => {})
+  return dir
+}
+
+/** Directory records of `kind` are written to (the export path; same as kindDir() when none is configured). */
+export async function writeKindDir(kind: EntityKind): Promise<string> {
+  const dir = join(await exportDataDir(), kind)
   await mkdir(dir, { recursive: true })
   return dir
 }
 
+/** Where a record is written (export side). */
+export async function entityWritePath(kind: EntityKind, slug: string): Promise<string> {
+  return join(await writeKindDir(kind), `${slug}.md`)
+}
+
+/** Where a record is read from: the export copy when it exists (it is the newer one), else the dataset copy. */
 export async function entityPath(kind: EntityKind, slug: string): Promise<string> {
-  return join(await kindDir(kind), `${slug}.md`)
+  const readPath = join(await kindDir(kind), `${slug}.md`)
+  if (exportRoot() === datasetRoot()) return readPath
+  const written = join(await exportDataDir(), kind, `${slug}.md`)
+  try {
+    await stat(written)
+    return written
+  } catch {
+    return readPath
+  }
 }
 
 function toStatus(v: unknown): EntityStatus {
@@ -86,14 +108,21 @@ function titleFromBody(body: string): string | undefined {
 }
 
 export async function listEntities(kind: EntityKind): Promise<EntitySummary[]> {
-  const dir = await kindDir(kind)
   const dataRoot = await dataDir()
-  const files = (await readdir(dir)).filter(f => f.endsWith('.md') && !f.startsWith('.') && f.toLowerCase() !== 'readme.md')
+  // dataset files first, export copies override them (same slug)
+  const byslug = new Map<string, string>()
+  const addDir = async (dir: string) => {
+    let names: string[] = []
+    try { names = await readdir(dir) } catch { return }
+    for (const f of names) {
+      if (f.endsWith('.md') && !f.startsWith('.') && f.toLowerCase() !== 'readme.md') byslug.set(basename(f, '.md'), join(dir, f))
+    }
+  }
+  await addDir(await kindDir(kind))
+  if (exportRoot() !== datasetRoot()) await addDir(join(await exportDataDir(), kind))
   const out: EntitySummary[] = []
-  for (const f of files) {
-    const slug = basename(f, '.md')
+  for (const [slug, full] of byslug) {
     try {
-      const full = join(dir, f)
       const [raw, st] = await Promise.all([readFile(full, 'utf8'), stat(full)])
       const rec = toRecord(dataRoot, kind, slug, raw, st.mtime)
       out.push({ kind, slug, name: rec.name, name_th: rec.name_th, name_en: rec.name_en, status: rec.status, updatedAt: rec.updatedAt })
@@ -174,13 +203,13 @@ export async function writeEntity(kind: EntityKind, slug: string, raw: string, o
     if (key in fm) fm[key] = toStringList(fm[key])
   }
   const content = stringifyFrontmatter(fm, body)
-  const full = await entityPath(kind, slug)
+  const full = await entityWritePath(kind, slug)
   await writeFile(full, content, 'utf8')
   return toRecord(await dataDir(), kind, slug, content, new Date(now))
 }
 
 export async function deleteEntity(kind: EntityKind, slug: string): Promise<void> {
-  const full = await entityPath(kind, slug)
+  const full = await entityWritePath(kind, slug)
   try {
     await unlink(full)
   } catch (err) {
@@ -193,7 +222,11 @@ export async function renameEntity(kind: EntityKind, from: string, to: string): 
   if (await entityExists(kind, to)) throw createError({ statusCode: 409, statusMessage: 'Exists', message: `${kind}/${to} already exists` })
   const rec = await getEntity(kind, from)
   if (!rec) throw createError({ statusCode: 404, statusMessage: 'Not found' })
-  await rename(await entityPath(kind, from), await entityPath(kind, to))
+  const src = await entityPath(kind, from)
+  const dst = await entityWritePath(kind, to)
+  // never move files out of the read-only dataset side: copy via writeEntity instead
+  if (src === await entityWritePath(kind, from)) await rename(src, dst)
+  else await writeFile(dst, rec.raw, 'utf8')
   return writeEntity(kind, to, rec.raw, { mustExist: true })
 }
 

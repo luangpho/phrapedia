@@ -12,7 +12,19 @@ npm run build
 npm run typecheck   # nuxt typecheck — 変更後は必ず通す
 npm test            # vitest (tests/**/*.test.ts, tests/setup.ts が Nitro のグローバルをスタブ)
 npm run smoke       # build 後に REST + MCP を疎通確認
+npm run tauri:dev   # デスクトップアプリ開発起動（npm run build && tauri dev。Rust 必要）
+npm run tauri:build # デスクトップアプリのビルド（src-tauri/tauri.bundle.conf.json で .output/server を同梱）
 ```
+
+## デスクトップクライアント（Tauri）と設定項目
+- `src-tauri/` が Nuxt の SPA（`PHRAPEDIA_TAURI=1 nuxt generate` → `.output-frontend`）を WebView に載せ、`.output/server` を Node sidecar（`127.0.0.1` の空きポート）で起動する。CLI（`npm run dev` / `npm start`）と Render は従来どおり。
+- 設定は 2 パス: **データセットパス**（読み出し元。env `PHRAPEDIA_DATASET_PATH`）と **書き出し先パス**（保存先・git 同期対象。env `PHRAPEDIA_EXPORT_PATH`）。app config dir の `settings.json` に保存。受け口は `server/utils/paths.ts`。不正パスは 409。詳細は `docs/ARCHITECTURE.md`。
+
+## 配布
+- タグ `v*` の push で `.github/workflows/release.yml` が macOS（aarch64 / x64）を tauri-action でビルドし、GitHub Release に `.dmg` / `.app.tar.gz` を添付。`APPLE_*` secret があれば署名・notarization、無ければスキップ。
+- Homebrew: `packaging/homebrew/Casks/phrapedia.rb`（`depends_on formula: "node"`）。`packaging/homebrew/update-cask.mjs` が version と sha256 を書き換え、`HOMEBREW_TAP_TOKEN` があれば `luangpho/homebrew-tap` へ push。
+- 成果物名は `Phrapedia_<version>_{aarch64,x64}.dmg`。`productName` / `version` を変えたら cask の `url` とワークフローのファイル名を合わせる。version は `package.json` / `Cargo.toml` / `tauri.conf.json` で揃える。
+- 手順の詳細は README の「リリース手順」。
 
 ## どこに何があるか
 - `data/<kind>/<slug>.md` — レコード（YAML frontmatter + 本文）。kind = monks | temples | amulets（将来）

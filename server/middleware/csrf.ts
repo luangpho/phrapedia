@@ -19,6 +19,9 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 415, statusMessage: 'Unsupported Media Type', message: 'API は application/json のみ受け付けます' })
   }
 
+  // Desktop app WebView (explicitly allowlisted origin, JSON-only enforced above): cross-origin by design.
+  if (isAllowedClientOrigin(getRequestHeader(event, 'origin'))) return
+
   const fetchSite = getRequestHeader(event, 'sec-fetch-site')
   if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden', message: 'クロスサイトからのリクエストは拒否されました' })

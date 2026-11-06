@@ -114,3 +114,30 @@ updated_at: 2026-11-05T00:00:00.000Z
 // Claude Code: .mcp.json / Antigravity CLI: `agy mcp add` または ~/.gemini/config/mcp_config.json / Gemini CLI: ~/.gemini/settings.json
 { "mcpServers": { "phrapedia": { "httpUrl": "http://localhost:3000/mcp" } } }
 ```
+
+## デスクトップクライアント（Tauri v2）
+
+`src-tauri/` が Nuxt をネイティブ WebView に載せる。CLI 起動（`npm run dev` / `npm start`）と Render デプロイは従来どおり。
+
+- **フロント**: `PHRAPEDIA_TAURI=1 nuxt generate`（`npm run generate:tauri`）で SPA（`ssr:false`）を `.output-frontend` に出力し、WebView が読む。
+- **サーバ**: 既存 Nitro（`.output/server/index.mjs`）を Rust が sidecar として子プロセス起動する。`127.0.0.1` の空きポートを割り当て、フロントはそのポートの API を叩く。Node は `PATH` 上の `node`（Homebrew 前提）。
+- **終了処理**: sidecar は専用プロセスグループで起動し、アプリ終了時にグループごと kill する。保険として `server/plugins/parent-watch.ts` が `PHRAPEDIA_PARENT_PID` の消滅を検知して自己終了する。
+- **起動**: `npm run tauri:dev` / `npm run tauri:build`（macOS バイナリは GitHub Actions で作る）。
+
+### 2 つのパス設定
+
+| 設定 | 意味 | 既定 | sidecar への渡し方 |
+|---|---|---|---|
+| データセットパス | 読み出し元の root。直下に `data/<kind>/`（`monks` `temples` `amulets` の Markdown）と `sources/` を持つ（現行 `PHRAPEDIA_ROOT` と同じ配置） | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 書き込み先の root（同じ配置の `data/<kind>/`）。git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
+
+- 保存先: Tauri app config dir の `settings.json`。再起動後も保持する。読み書きは Tauri command（`get_path_settings` / `save_path_settings` など）。フォルダ選択は `tauri-plugin-dialog`。
+- 2 パス未指定（CLI）の時は従来動作: `PHRAPEDIA_ROOT`（既定 cwd）配下を使う。`dataDir` / `sourcesDir` 設定は両モードで root からの相対位置として有効。
+- 検証: 「絶対パスでない」「存在しない」「ディレクトリでない」「書き込めない（書き出し先）」を検出し、UI（設定ページとエラーバナー）に表示する。**不正パスでもアプリと sidecar は落とさず起動**し、該当 API は 409 を返す。
+
+### 読み書きと git 同期の規則
+
+1. 書き込み（保存・削除・リネーム）は常に書き出し先。データセット側のファイルは変更・移動・削除しない（読み取り専用でも使える）。
+2. 読み出しは書き出し先を優先し、同じ slug が書き出し先に無ければデータセットへ fallback する。一覧はデータセット → 書き出し先の順にマージし、同 slug は書き出し先が勝つ。`sources/` はデータセット側のみ。
+3. **git 操作（commit / pull / push）の対象は書き出し先**。書き出し先が git リポジトリの時だけ有効。リポジトリでなければ同期 UI は「Git 管理外」と表示し、commit / pull / push は実行しない。ステージするのは書き出し先配下の data ディレクトリのみ。
+4. 書き出し先 = データセットパスの時は読み書きとも同一 root で、従来（読み出し元を直接 git 管理）と同じ挙動になる。

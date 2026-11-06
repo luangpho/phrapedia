@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-apple-darwin
+          - arch: x64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # APPLE_* secrets が未設定なら空文字になり、署名・notarization はスキップされる
+      - name: Build and publish (tauri-action)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Phrapedia ${{ github.ref_name }}
+          releaseBody: See the assets to download and install this version.
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.bundle.conf.json
+
+      - name: Attach .app.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/${TARGET}/release/bundle/macos"
+          archive="Phrapedia_${TAG#v}_${ARCH}.app.tar.gz"
+          tar -czf "${RUNNER_TEMP}/${archive}" -C "${bundle}" Phrapedia.app
+          gh release upload "${TAG}" "${RUNNER_TEMP}/${archive}" --clobber
+
+  cask:
+    name: update Homebrew cask
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check tap credentials
+        id: gate
+        run: |
+          if [ -z "${TAP_TOKEN}" ] && [ -z "${TAP_SSH_KEY}" ]; then
+            echo "HOMEBREW_TAP_TOKEN / HOMEBREW_TAP_SSH_KEY 未設定のため cask 更新をスキップ"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          node-version: 22
+
+      - name: Download dmg and fill cask
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          mkdir -p "${RUNNER_TEMP}/dmg"
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/dmg" \
+            --pattern "Phrapedia_${version}_aarch64.dmg" \
+            --pattern "Phrapedia_${version}_x64.dmg"
+          node packaging/homebrew/update-cask.mjs \
+            --version "${version}" \
+            --arm-dmg "${RUNNER_TEMP}/dmg/Phrapedia_${version}_aarch64.dmg" \
+            --intel-dmg "${RUNNER_TEMP}/dmg/Phrapedia_${version}_x64.dmg" \
+            --cask packaging/homebrew/Casks/phrapedia.rb
+
+      - name: Push cask to tap
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "${TAP_SSH_KEY}" ]; then
+            key="${RUNNER_TEMP}/tap_deploy_key"
+            known_hosts="${RUNNER_TEMP}/tap_known_hosts"
+            ( umask 077; printf '%s\n' "${TAP_SSH_KEY}" > "${key}" )
+            chmod 600 "${key}"
+            ssh-keyscan github.com > "${known_hosts}" 2>/dev/null
+            export GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=yes"
+            tap_url="git@github.com:luangpho/homebrew-tap.git"
+          else
+            tap_url="https://x-access-token:${TAP_TOKEN}@github.com/luangpho/homebrew-tap.git"
+          fi
+          git clone "${tap_url}" "${RUNNER_TEMP}/tap"
+          mkdir -p "${RUNNER_TEMP}/tap/Casks"
+          cp packaging/homebrew/Casks/phrapedia.rb "${RUNNER_TEMP}/tap/Casks/phrapedia.rb"
+          cd "${RUNNER_TEMP}/tap"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/phrapedia.rb
+          if git diff --cached --quiet; then
+            echo "cask に変更なし"
+          else
+            git commit -m "phrapedia ${TAG#v}"
+            git push origin HEAD
+          fi
+
+      - name: Remove deploy key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/tap_deploy_key" "${RUNNER_TEMP}/tap_known_hosts"

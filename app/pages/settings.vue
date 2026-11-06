@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from '#shared/types'
 useHead({ title: '設定 - Phrapedia' })
 
 const toast = useToast()
+const { isDesktop } = useDesktop()
 const { data: view, status, error, refresh, save, reindex, ready } = useSettings()
 await ready
 
@@ -91,6 +92,8 @@ async function onReindex() {
 
     <template #body>
       <div class="mx-auto w-full max-w-3xl">
+        <DesktopPathsCard v-if="isDesktop" class="mb-6" />
+
         <div v-if="status === 'pending' && !loaded" class="space-y-4" aria-busy="true">
           <USkeleton v-for="i in 4" :key="i" class="h-40 w-full" />
         </div>

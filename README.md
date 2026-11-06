@@ -15,15 +15,19 @@
 1. [機能](#機能)
 2. [必要なもの](#必要なもの)
 3. [クイックスタート](#クイックスタート)
-4. [情報の優先順位](#情報の優先順位)
-5. [画面の流れ](#画面の流れ)
-6. [設定リファレンス](#設定リファレンス)
-7. [Git 同期](#git-同期)
-8. [Render へデプロイ](#render-へデプロイ)
-9. [MCP で使う](#mcp-で使う)
-10. [開発コマンド](#開発コマンド)
-11. [トラブルシューティング](#トラブルシューティング)
-12. [ロードマップ](#ロードマップ)
+4. [Homebrew でインストール](#homebrew-でインストール)
+5. [情報の優先順位](#情報の優先順位)
+6. [画面の流れ](#画面の流れ)
+7. [設定リファレンス](#設定リファレンス)
+8. [Git 同期](#git-同期)
+9. [Render へデプロイ](#render-へデプロイ)
+10. [MCP で使う](#mcp-で使う)
+11. [開発コマンド](#開発コマンド)
+12. [リリース手順](#リリース手順)
+13. [tap リポジトリの作り方](#tap-リポジトリの作り方)
+14. [署名・notarization の設定](#署名notarization-の設定)
+15. [トラブルシューティング](#トラブルシューティング)
+16. [ロードマップ](#ロードマップ)
 
 ---
 
@@ -64,6 +68,13 @@ cp .env.example .env      # NUXT_ANTHROPIC_API_KEY を記入（GEMINI_API_KEY �
 npm run dev               # http://localhost:3000
 ```
 
+デスクトップアプリとして開発する場合（Rust ツールチェーンと、Tauri の OS 別前提パッケージが必要。[Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)）:
+
+```bash
+npm run tauri:dev     # = npm run build && tauri dev
+npm run tauri:build   # インストーラ生成（src-tauri/target/release/bundle/）
+```
+
 初回起動時に `.phrapedia/`（PGlite のデータベース。設定・チャット履歴・検索インデックス・Web 調査キャッシュ）が作られます。Git 管理外です。
 
 サンプルとして以下のレコードと一次資料が同梱されています（いずれも `status: draft`、「要確認」箇所あり）。
@@ -92,6 +103,21 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 - ブラウザからの API 呼び出しには同一オリジン・JSON 限定のチェック（CSRF 対策）がかかっています。
 - API キーはブラウザへ渡さず、`.env` / 環境変数のみで扱います。
 - アプリ内のチャット AI には Git 同期ツール（`sync_data`）を渡していません。GitHub への push は常に同期パネルからの操作です（自動プッシュ設定を除く）。
+
+## Homebrew でインストール
+
+macOS（Apple Silicon / Intel）向けのデスクトップアプリ（Tauri）を Homebrew cask で配布します。
+
+```bash
+brew tap luangpho/tap
+brew install --cask phrapedia
+```
+
+- cask は `depends_on formula: "node"` を持つので、Homebrew の `node` も一緒に入ります。アプリは `node` を子プロセス（sidecar）として起動します。
+- 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
+- 署名・notarization が未設定のビルドは Gatekeeper に止められることがあります（[署名・notarization の設定](#署名notarization-の設定)）。
+- 更新: `brew upgrade --cask phrapedia`。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
+- 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。API キー（`NUXT_ANTHROPIC_API_KEY` 等）は、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
 ## 情報の優先順位
 
@@ -164,6 +190,17 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 | 作者名 / メール | `git.authorName` / `git.authorEmail` | （空 = git の設定） | コミット作者（リポジトリローカル設定に書き込み） |
 | 自動コミット | `git.autoCommit` | `false` | レコードの保存・削除ごとにコミット |
 | 自動プッシュ | `git.autoPush` | `false` | 自動コミット後に push |
+
+### デスクトップアプリ（Tauri）の設定項目
+
+デスクトップアプリでは、上記に加えて次の 2 つのパスを設定画面で指定します（Tauri の app config dir の `settings.json` に保存され、再起動後も保持されます）。
+
+| 項目 | 意味 | 既定値 | sidecar への渡し方 |
+|---|---|---|---|
+| データセットパス | 読み出し元。直下に `data/<kind>/`（monks, temples, amulets）と `sources/` を持つ root。リポジトリの clone をそのまま指定できる | アプリデータ dir 配下 `dataset` | `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 書き込み先。同じ配置の root。Git 同期の対象（git リポジトリの時のみ） | データセットパスと同じ | `PHRAPEDIA_EXPORT_PATH` |
+
+絶対パスでない・存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
 
 API キーは画面からは設定できません（ブラウザに渡さないため）。`.env` の `NUXT_ANTHROPIC_API_KEY`（または `ANTHROPIC_API_KEY`）、`GEMINI_API_KEY` を使います。そのほか `NUXT_STATE_DIR`（PGlite の場所、既定 `.phrapedia`）、`PHRAPEDIA_ROOT`（プロジェクトルート、既定はカレントディレクトリ）があります。
 
@@ -276,7 +313,56 @@ npm run typecheck   # nuxt typecheck
 npm test            # vitest（tests/**/*.test.ts）
 npm run smoke       # ビルド済みサーバを起動して REST / MCP の疎通確認（先に npm run build）
 npm start           # 本番サーバ起動（.env を読み込む）
+npm run tauri:dev   # デスクトップアプリを開発起動（npm run build → tauri dev。Rust ツールチェーンが必要）
+npm run tauri:build # デスクトップアプリをビルド（src-tauri/target/release/bundle/ に出力）
 ```
+
+`tauri:build` は `src-tauri/tauri.bundle.conf.json` を重ねて `.output/server` を同梱します。macOS 向けの配布物は GitHub Actions（下記）で作ります。
+
+## リリース手順
+
+1. `package.json` / `src-tauri/Cargo.toml` / `src-tauri/tauri.conf.json` の `version` を揃えて更新し、コミット・push する。
+2. タグを打って push する（`v` + version。version と一致させること）。
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+3. `.github/workflows/release.yml` が走り、macOS（aarch64 / x86_64）をビルドして GitHub Release に添付する。
+   - `Phrapedia_<version>_aarch64.dmg` / `Phrapedia_<version>_x64.dmg`
+   - `Phrapedia_<version>_aarch64.app.tar.gz` / `Phrapedia_<version>_x64.app.tar.gz`
+4. 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_SSH_KEY`（推奨）か `HOMEBREW_TAP_TOKEN` のどちらかが必要で、両方無ければこのジョブはスキップされる（両方あれば SSH 鍵を優先）。
+5. 手動で cask を更新する場合:
+   ```bash
+   node packaging/homebrew/update-cask.mjs --version 0.1.0 \
+     --arm-dmg Phrapedia_0.1.0_aarch64.dmg --intel-dmg Phrapedia_0.1.0_x64.dmg
+   # sha256 を直接渡す場合は --arm-sha / --intel-sha。別ファイルは --cask <path>
+   ```
+
+## tap リポジトリの作り方
+
+`brew tap luangpho/tap` は GitHub の **`luangpho/homebrew-tap`**（`homebrew-` 接頭辞が必須）を参照します。このリポジトリには含まれないので、別途作成します。
+
+1. GitHub で `luangpho/homebrew-tap` を作成する（public。README だけで可）。
+2. `Casks/` ディレクトリを作り、`packaging/homebrew/Casks/phrapedia.rb` をコピーして push する（以降は release ワークフローが更新する）。
+3. 自動更新用の認証を用意する（どちらか。**推奨は deploy key**）。Settings → Secrets and variables → Actions に登録する。
+   - **`HOMEBREW_TAP_SSH_KEY`（推奨）**: `luangpho/homebrew-tap` に write 権限の deploy key を作る（`ssh-keygen -t ed25519 -f tap_key -N ""`。公開鍵を homebrew-tap の Settings → Deploy keys に "Allow write access" 付きで登録）。秘密鍵（OpenSSH 形式）を `HOMEBREW_TAP_SSH_KEY` として登録する。
+   - `HOMEBREW_TAP_TOKEN`: `luangpho/homebrew-tap` への書き込み権限を持つ Personal Access Token（fine-grained: 対象リポジトリ `homebrew-tap`、Contents: Read and write）を `HOMEBREW_TAP_TOKEN` として登録する。
+4. 動作確認: `brew tap luangpho/tap && brew install --cask phrapedia`。
+
+## 署名・notarization の設定
+
+Apple Developer Program のアカウントがあれば、リポジトリ secret を登録するだけで release ワークフローが署名と notarization を行います。**未設定の場合はスキップ**され、署名なし（ad-hoc）のビルドになります。
+
+| Secret | 内容 |
+|---|---|
+| `APPLE_CERTIFICATE` | Developer ID Application 証明書（.p12）を base64 化した文字列（`base64 -i cert.p12 \| pbcopy`） |
+| `APPLE_CERTIFICATE_PASSWORD` | .p12 を書き出した時のパスワード |
+| `APPLE_SIGNING_IDENTITY` | 例: `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | notarization に使う Apple ID |
+| `APPLE_PASSWORD` | その Apple ID の app 用パスワード（appleid.apple.com で発行） |
+| `APPLE_TEAM_ID` | Team ID |
+
+詳細は [Tauri: macOS Code Signing](https://v2.tauri.app/distribute/sign/macos/) を参照。署名なしのビルドを入れた場合、初回は「右クリック → 開く」か、`xattr -dr com.apple.quarantine /Applications/Phrapedia.app` で隔離属性を外します。
 
 ## トラブルシューティング
 

@@ -1,3 +1,4 @@
+import { relative, resolve } from 'node:path'
 import { DEFAULT_SETTINGS } from '../../shared/types/settings'
 import type { AppSettings } from '../../shared/types/settings'
 
@@ -65,12 +66,28 @@ export function isSafeGitName(name: string): boolean {
 
 /** Absolute path of the primary-sources directory. */
 export async function sourcesDir(): Promise<string> {
+  assertDatasetUsable()
   const s = await getSettings()
   return resolveFromRoot(s.sourcesDir)
 }
 
-/** Absolute path of the records directory. */
+/** Absolute path of the records directory to read from (inside the dataset path). */
 export async function dataDir(): Promise<string> {
+  assertDatasetUsable()
   const s = await getSettings()
   return resolveFromRoot(s.dataDir)
+}
+
+/**
+ * Absolute path of the records directory to write to (inside the export path), mirroring dataDir()'s
+ * location relative to the dataset root. Equals dataDir() when no separate export path is configured.
+ */
+export async function exportDataDir(): Promise<string> {
+  const read = await dataDir()
+  const exportBase = exportRoot()
+  if (exportBase === datasetRoot()) return read
+  assertExportUsable()
+  const base = datasetRoot()
+  const rel = isInside(base, read) ? relative(base, read) : 'data'
+  return resolve(exportBase, rel || 'data')
 }

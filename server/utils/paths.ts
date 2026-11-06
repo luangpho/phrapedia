@@ -12,10 +12,28 @@ export function projectRoot(): string {
   return process.cwd()
 }
 
-/** Resolve a user-provided directory: absolute stays, relative is taken from the project root. */
+/**
+ * Dataset root = directory holding data/<kind>/*.md and sources/ (read side).
+ * Desktop (Tauri) app: PHRAPEDIA_DATASET_PATH. CLI: unset, so it equals projectRoot().
+ */
+export function datasetRoot(): string {
+  const env = process.env.PHRAPEDIA_DATASET_PATH
+  return env ? resolve(env) : projectRoot()
+}
+
+/**
+ * Export root = directory records are written to; also the git working tree for sync.
+ * Desktop (Tauri) app: PHRAPEDIA_EXPORT_PATH. Unset or empty = same as datasetRoot().
+ */
+export function exportRoot(): string {
+  const env = process.env.PHRAPEDIA_EXPORT_PATH
+  return env ? resolve(env) : datasetRoot()
+}
+
+/** Resolve a user-provided directory: absolute stays, relative is taken from the dataset root. */
 export function resolveFromRoot(p: string): string {
-  if (!p) return projectRoot()
-  return isAbsolute(p) ? p : resolve(projectRoot(), p)
+  if (!p) return datasetRoot()
+  return isAbsolute(p) ? p : resolve(datasetRoot(), p)
 }
 
 /** True when `child` is inside `parent` (or equal). Both must be absolute. */
