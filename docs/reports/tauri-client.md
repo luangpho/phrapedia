@@ -30,7 +30,7 @@
 ## 実装 worker (brew-release)
 
 ### 変更内容
-- `.github/workflows/release.yml`: tag `v*` push で macOS aarch64 / x86_64 を tauri-action でビルドし GitHub Release に `.dmg` を添付。`.app.tar.gz` はワークフロー内で `tar` して `gh release upload`。`APPLE_*` secret が空なら署名・notarization はスキップ（tauri-action は空文字を未設定扱い）。`cask` ジョブは `HOMEBREW_TAP_TOKEN` があるときだけ dmg を取得 → sha256 を埋めて `luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push。
+- `.github/workflows/release.yml`: tag `v*` push で macOS aarch64 / x86_64 を tauri-action でビルドし GitHub Release に `.dmg` を添付。`.app.tar.gz` はワークフロー内で `tar` して `gh release upload`。`APPLE_*` secret が空なら署名・notarization はスキップ（tauri-action は空文字を未設定扱い）。`cask` ジョブは `HOMEBREW_TAP_SSH_KEY`（deploy key、推奨）か `HOMEBREW_TAP_TOKEN` があるときだけ dmg を取得 → sha256 を埋めて `luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push。
 - `packaging/homebrew/Casks/phrapedia.rb`: `depends_on formula: "node"`、`arch arm:/intel:` で URL と sha256 を切替。成果物名 `Phrapedia_<version>_{aarch64,x64}.dmg`（tauri-bundler の dmg 命名規則: `{productName}_{version}_{arch}`, x86_64 は `x64`）。sha256 は 0 埋めのプレースホルダ。
 - `packaging/homebrew/update-cask.mjs`: `--version` と `--arm-dmg/--intel-dmg`（または `--arm-sha/--intel-sha`）で書き換え。入力検証と書き換え後の自己検査あり。
 - README: Homebrew インストール / リリース手順 / tap リポジトリの作り方 / 署名・notarization / Tauri 設定項目 / 開発コマンドを追加。CLAUDE.md: tauri:dev / tauri:build / 設定項目 / 配布を追加。
@@ -45,7 +45,7 @@
 ### 未解決
 - ワークフロー実走は未実施（macOS runner が必要）。dmg 名はソース（tauri-bundler `dmg/mod.rs`）で確認したのみで、実ビルド出力との一致は初回タグで要確認。
 - `.app.tar.gz` は tauri-action ではなく自前で作成（updater 鍵なしだと tauri は生成しないため）。
-- 初回リリース前に `luangpho/homebrew-tap` の作成と `HOMEBREW_TAP_TOKEN` の登録が必要（README 参照）。署名 secret 未設定だと Gatekeeper 警告あり。
+- 初回リリース前に `luangpho/homebrew-tap` の作成と `HOMEBREW_TAP_SSH_KEY`（推奨）または `HOMEBREW_TAP_TOKEN` の登録が必要（README 参照）。署名 secret 未設定だと Gatekeeper 警告あり。
 - GUI 起動のアプリはシェル環境変数（`NUXT_ANTHROPIC_API_KEY` 等）を引き継がない可能性。sidecar は Rust 側の env を継承するだけで `.env` は読まない。実機（macOS）で要確認。
 
 ## レビュー (review worker)
@@ -92,3 +92,10 @@
 - clean clone で `npm ci` / `npm test` 57 passed / `npm run typecheck` exit 0（vue-router/volar 警告のみ）/ `cargo check` 成功 / `npm run tauri:build` 成功（deb / rpm / AppImage）。ビルド後 `git status` は clean（`src-tauri/gen` は ignore され再生成される）。
 - 削除した `icons/android` `ios` と `src-tauri/gen` への参照は `.github` / `tauri.conf.json` / capabilities に無し。追跡ファイルの欠けなし。
 - 未実施: `actionlint .github/workflows/release.yml`。本環境に actionlint が無く、docker daemon も無い。バイナリ取得は権限で拒否されたため未実行。
+
+## cask ジョブの SSH deploy key 対応
+
+- `release.yml` cask ジョブ: gate は `HOMEBREW_TAP_TOKEN` / `HOMEBREW_TAP_SSH_KEY` のどちらかが非空で enabled、両方空ならスキップ。
+- push: `HOMEBREW_TAP_SSH_KEY` があれば優先。秘密鍵を `$RUNNER_TEMP` に 0600 で書き、`ssh-keyscan` の known_hosts と `GIT_SSH_COMMAND`（IdentitiesOnly=yes / StrictHostKeyChecking=yes）で `git@github.com:luangpho/homebrew-tap.git` を clone・push。鍵が無く token があれば従来の https。
+- 鍵・known_hosts は `if: always()` の最終ステップで削除。secret は env 経由、`printf '%s\n'` で書き、`set -x` / echo は使わない。cask 生成・commit は変更なし。
+- README の tap 手順に deploy key の作り方を追記（推奨）。

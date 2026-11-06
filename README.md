@@ -330,7 +330,7 @@ npm run tauri:build # デスクトップアプリをビルド（src-tauri/target
 3. `.github/workflows/release.yml` が走り、macOS（aarch64 / x86_64）をビルドして GitHub Release に添付する。
    - `Phrapedia_<version>_aarch64.dmg` / `Phrapedia_<version>_x64.dmg`
    - `Phrapedia_<version>_aarch64.app.tar.gz` / `Phrapedia_<version>_x64.app.tar.gz`
-4. 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_TOKEN` が無ければこのジョブはスキップされる。
+4. 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_SSH_KEY`（推奨）か `HOMEBREW_TAP_TOKEN` のどちらかが必要で、両方無ければこのジョブはスキップされる（両方あれば SSH 鍵を優先）。
 5. 手動で cask を更新する場合:
    ```bash
    node packaging/homebrew/update-cask.mjs --version 0.1.0 \
@@ -344,7 +344,9 @@ npm run tauri:build # デスクトップアプリをビルド（src-tauri/target
 
 1. GitHub で `luangpho/homebrew-tap` を作成する（public。README だけで可）。
 2. `Casks/` ディレクトリを作り、`packaging/homebrew/Casks/phrapedia.rb` をコピーして push する（以降は release ワークフローが更新する）。
-3. 自動更新用に、`luangpho/homebrew-tap` への書き込み権限を持つ Personal Access Token（fine-grained: 対象リポジトリ `homebrew-tap`、Contents: Read and write）を発行し、このリポジトリの Settings → Secrets and variables → Actions に `HOMEBREW_TAP_TOKEN` として登録する。
+3. 自動更新用の認証を用意する（どちらか。**推奨は deploy key**）。Settings → Secrets and variables → Actions に登録する。
+   - **`HOMEBREW_TAP_SSH_KEY`（推奨）**: `luangpho/homebrew-tap` に write 権限の deploy key を作る（`ssh-keygen -t ed25519 -f tap_key -N ""`。公開鍵を homebrew-tap の Settings → Deploy keys に "Allow write access" 付きで登録）。秘密鍵（OpenSSH 形式）を `HOMEBREW_TAP_SSH_KEY` として登録する。
+   - `HOMEBREW_TAP_TOKEN`: `luangpho/homebrew-tap` への書き込み権限を持つ Personal Access Token（fine-grained: 対象リポジトリ `homebrew-tap`、Contents: Read and write）を `HOMEBREW_TAP_TOKEN` として登録する。
 4. 動作確認: `brew tap luangpho/tap && brew install --cask phrapedia`。
 
 ## 署名・notarization の設定

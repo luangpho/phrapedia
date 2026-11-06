@@ -76,14 +76,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Check tap token
+      - name: Check tap credentials
         id: gate
         run: |
-          if [ -z "${TAP_TOKEN}" ]; then
-            echo "HOMEBREW_TAP_TOKEN 未設定のため cask 更新をスキップ"
+          if [ -z "${TAP_TOKEN}" ] && [ -z "${TAP_SSH_KEY}" ]; then
+            echo "HOMEBREW_TAP_TOKEN / HOMEBREW_TAP_SSH_KEY 未設定のため cask 更新をスキップ"
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -116,7 +117,18 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/luangpho/homebrew-tap.git" "${RUNNER_TEMP}/tap"
+          if [ -n "${TAP_SSH_KEY}" ]; then
+            key="${RUNNER_TEMP}/tap_deploy_key"
+            known_hosts="${RUNNER_TEMP}/tap_known_hosts"
+            ( umask 077; printf '%s\n' "${TAP_SSH_KEY}" > "${key}" )
+            chmod 600 "${key}"
+            ssh-keyscan github.com > "${known_hosts}" 2>/dev/null
+            export GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=yes"
+            tap_url="git@github.com:luangpho/homebrew-tap.git"
+          else
+            tap_url="https://x-access-token:${TAP_TOKEN}@github.com/luangpho/homebrew-tap.git"
+          fi
+          git clone "${tap_url}" "${RUNNER_TEMP}/tap"
           mkdir -p "${RUNNER_TEMP}/tap/Casks"
           cp packaging/homebrew/Casks/phrapedia.rb "${RUNNER_TEMP}/tap/Casks/phrapedia.rb"
           cd "${RUNNER_TEMP}/tap"
@@ -129,3 +141,7 @@ jobs:
             git commit -m "phrapedia ${TAG#v}"
             git push origin HEAD
           fi
+
+      - name: Remove deploy key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/tap_deploy_key" "${RUNNER_TEMP}/tap_known_hosts"
