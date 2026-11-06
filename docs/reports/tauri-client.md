@@ -50,7 +50,7 @@
 
 ## レビュー (review worker)
 
-対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体。途中で A レイアウト（root 配下に `data/<kind>/` と `sources/`）へ戻す revert 3 件（7c82306）が入ったため、rebase 後の HEAD で再確認した。
+対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体。データセットパス仕様は A 案で確定（master-cap 確定: root 直下に `data/<kind>/` と `sources/`、`PHRAPEDIA_ROOT` と同配置。書き出し先も同配置・既定は同一。`dataDir` / `sourcesDir` 設定は従来どおり有効）。B 案（data/ 相当を直置き）は不採用で、途中の A↔B 往復は全て A に戻した。
 
 ### 指摘一覧
 | # | severity | 内容 | 修正 |
@@ -61,7 +61,7 @@
 | 4 | info | アプリが SIGKILL された場合、`parent-watch` で node は最大 3 秒で終了するが、node の子（`agy` 等）は残りうる | 未修正（影響小。下記） |
 | 5 | info | `safeJoin` は字句的検証のみ。`sources/` 内の symlink が外を指す場合は辿る（データセットはユーザー選択パスのため許容範囲） | 未修正（server/ は最小修正方針） |
 | 6 | info | CSP の `script-src` に `'unsafe-eval'`（Nuxt dev 用の可能性）。本番で必要かは未検証 | 未修正 |
-| 7 | medium | A 案確定（root 直下に `data/<kind>/` と `sources/`）後も README の設定表（「`data/` 相当のフォルダ」「直下に `monks/`」）と設定画面の説明文が B のまま。`exportDataDir()` の A 配置を検証するテストも無かった | 済（README・`PathsCard.vue` を A に統一、`tests/layout.test.ts` 追加。ARCHITECTURE / CLAUDE.md / 本レポートは A で一貫を確認） |
+| 7 | medium | A↔B の往復で README・設定画面説明・テスト・report の記述が A とずれうる状態になった | 済（A に統一。`tests/layout.test.ts` は A 配置 4 件、README / ARCHITECTURE / CLAUDE.md / report は A で一貫を確認） |
 
 観点別の結論: slug は `assertSlug`（`/` `\` `.` 先頭を拒否）、`sources/` は `safeJoin` で検証済み。設定ファイル破損は既定値 + 警告で起動継続（テストあり）。書込不可の書き出し先は実書込プローブで検出。Node 不在は起動失敗としてエラーバナー表示。cask / workflow / `tauri.conf.json` は整合（`productName` Phrapedia、version 0.1.0、identifier `jp.grrow.phrapedia`、成果物 `Phrapedia_<version>_{aarch64,x64}.dmg`、sha256 は `update-cask.mjs` が dmg から計算して埋める、arch 切替は `arch arm:/intel:`）。`render.yaml` / `scripts/render-start.mjs` は無変更、CLI 起動（env 未設定）は従来どおり動作。
 
