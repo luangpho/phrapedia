@@ -3,6 +3,7 @@
 
 <template>
   <UApp>
+    <DesktopBanner />
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

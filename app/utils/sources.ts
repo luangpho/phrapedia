@@ -4,7 +4,7 @@ export function encodeSourcePath(path: string): string {
 }
 
 export function sourceFileUrl(path: string, raw = true): string {
-  return `/api/sources/file/${encodeSourcePath(path)}${raw ? '?raw=1' : ''}`
+  return apiUrl(`/api/sources/file/${encodeSourcePath(path)}${raw ? '?raw=1' : ''}`)
 }
 
 export function isExternalUrl(v: string): boolean {
