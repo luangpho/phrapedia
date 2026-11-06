@@ -68,6 +68,10 @@ fn check_dir(path: &str, need_write: bool) -> Result<(), String> {
         return Err("パスが指定されていません".into());
     }
     let p = Path::new(path);
+    // The sidecar runs with its own cwd, so a relative path would mean something different there than here.
+    if !p.is_absolute() {
+        return Err(format!("絶対パスを指定してください: {path}"));
+    }
     let meta = match fs::metadata(p) {
         Ok(m) => m,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(format!("フォルダが存在しません: {path}")),
@@ -136,6 +140,8 @@ mod tests {
         assert!(check_dataset(p).is_ok());
         assert!(check_export(p).is_ok());
         assert!(check_dataset("").unwrap_err().contains("指定"));
+        assert!(check_dataset("relative/dir").unwrap_err().contains("絶対パス"));
+        assert!(check_export("~/data").unwrap_err().contains("絶対パス"));
         let missing = d.path().join("missing");
         assert!(check_dataset(missing.to_str().unwrap()).unwrap_err().contains("存在しません"));
         let f = d.path().join("f.txt");

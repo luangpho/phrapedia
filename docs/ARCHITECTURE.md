@@ -133,7 +133,7 @@ updated_at: 2026-11-05T00:00:00.000Z
 
 - 保存先: Tauri app config dir の `settings.json`。再起動後も保持する。読み書きは Tauri command（`get_path_settings` / `save_path_settings` など）。フォルダ選択は `tauri-plugin-dialog`。
 - 2 パス未指定（CLI）の時は従来動作: `PHRAPEDIA_ROOT`（既定 cwd）配下を使う。`dataDir` / `sourcesDir` 設定は両モードで root からの相対位置として有効。
-- 検証: 「存在しない」「ディレクトリでない」「書き込めない（書き出し先）」を検出し、UI（設定ページとエラーバナー）に表示する。**不正パスでもアプリと sidecar は落とさず起動**し、該当 API は 409 を返す。
+- 検証: 「絶対パスでない」「存在しない」「ディレクトリでない」「書き込めない（書き出し先）」を検出し、UI（設定ページとエラーバナー）に表示する。**不正パスでもアプリと sidecar は落とさず起動**し、該当 API は 409 を返す。
 
 ### 読み書きと git 同期の規則
 
