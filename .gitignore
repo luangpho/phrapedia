@@ -14,3 +14,7 @@ logs
 !.env.example
 # Phrapedia local state (PGlite database, caches)
 .phrapedia/
+
+# Tauri desktop client
+.output-frontend
+src-tauri/target

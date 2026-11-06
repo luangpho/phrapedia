@@ -1,10 +1,14 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+// Desktop (Tauri) frontend build: PHRAPEDIA_TAURI=1 nuxt generate -> SPA (ssr:false) in .output-frontend/public.
+// Everything else (dev / build / start / Render) keeps SSR and the default .output.
+const tauri = process.env.PHRAPEDIA_TAURI === '1'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxt/ui', '@nuxtjs/mcp-toolkit'],
   css: ['~/assets/css/main.css'],
-  ssr: true,
+  ssr: !tauri,
 
   app: {
     head: {
@@ -51,6 +55,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    ...(tauri ? { output: { dir: '.output-frontend' } } : {}),
     experimental: { asyncContext: true },
     // PGlite ships a WASM bundle; keep it external so Nitro does not try to inline it.
     externals: { external: ['@electric-sql/pglite'] },
