@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { assertDatasetUsable, assertExportUsable, checkDatasetPath, checkExportPath } from '../server/utils/path-validation'
-import { datasetRoot, exportRoot, projectRoot } from '../server/utils/paths'
+import { datasetRoot, exportRoot, isDesktopMode, projectRoot } from '../server/utils/paths'
 
 let dir: string
 const saved = { ...process.env }
@@ -46,6 +46,7 @@ describe('roots from environment', () => {
   it('falls back to the project root when unset (CLI mode)', () => {
     delete process.env.PHRAPEDIA_DATASET_PATH
     delete process.env.PHRAPEDIA_EXPORT_PATH
+    expect(isDesktopMode()).toBe(false)
     expect(datasetRoot()).toBe(projectRoot())
     expect(exportRoot()).toBe(projectRoot())
     expect(() => assertDatasetUsable()).not.toThrow()
@@ -68,5 +69,24 @@ describe('roots from environment', () => {
     process.env.PHRAPEDIA_DATASET_PATH = dir
     process.env.PHRAPEDIA_EXPORT_PATH = join(dir, 'missing')
     expect(() => assertExportUsable()).toThrowError(/書き出し先パスが使えません/)
+  })
+})
+
+describe('directory layout in desktop mode', () => {
+  it('dataset path is the data directory itself, sources/ directly inside; export path is the write dir', async () => {
+    const { dataDir, sourcesDir, exportDataDir } = await import('../server/utils/settings')
+    process.env.PHRAPEDIA_DATASET_PATH = dir
+    process.env.PHRAPEDIA_EXPORT_PATH = dir
+    expect(await dataDir()).toBe(dir)
+    expect(await sourcesDir()).toBe(join(dir, 'sources'))
+    expect(await exportDataDir()).toBe(dir)
+    const out = mkdtempSync(join(tmpdir(), 'phrapedia-pv-out-'))
+    try {
+      process.env.PHRAPEDIA_EXPORT_PATH = out
+      expect(await dataDir()).toBe(dir)
+      expect(await exportDataDir()).toBe(out)
+    } finally {
+      rmSync(out, { recursive: true, force: true })
+    }
   })
 })

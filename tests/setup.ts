@@ -57,3 +57,4 @@ g.assertDatasetUsable = pathValidation.assertDatasetUsable
 g.assertExportUsable = pathValidation.assertExportUsable
 g.datasetRoot = paths.datasetRoot
 g.exportRoot = paths.exportRoot
+g.isDesktopMode = paths.isDesktopMode
