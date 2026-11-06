@@ -5,7 +5,7 @@
 ### 変更内容
 - `src-tauri/`: Tauri v2 シェル。Rust が `.output/server` を Node sidecar として `127.0.0.1` の空きポートで起動し、終了時にプロセスグループごと kill。`PHRAPEDIA_PARENT_PID` による自己終了ウォッチドッグ（`server/plugins/parent-watch.ts`）を併用。
 - Nuxt: `PHRAPEDIA_TAURI=1` で SPA 出力（`.output-frontend`）。CLI の `dev` / `start` / Render は無変更（opt-in）。
-- 設定: app config dir の `settings.json` にデータセットパス・書き出し先パスを保存（既定の書き出し先 = データセットパス）。Tauri command で読み書き・検証、`tauri-plugin-dialog` でフォルダ選択。sidecar へは環境変数 `PHRAPEDIA_DATASET_PATH` / `PHRAPEDIA_EXPORT_PATH`。（データセットパス = data/ 相当、直下に monks/ 等と sources/）
+- 設定: app config dir の `settings.json` にデータセットパス・書き出し先パスを保存（既定の書き出し先 = データセットパス）。Tauri command で読み書き・検証、`tauri-plugin-dialog` でフォルダ選択。sidecar へは環境変数 `PHRAPEDIA_DATASET_PATH` / `PHRAPEDIA_EXPORT_PATH`。（データセットパス・書き出し先とも root。直下に data/<kind>/ と sources/、PHRAPEDIA_ROOT と同配置）
 - server: `paths.ts` / `settings.ts` / `entities.ts` / `git.ts` に受け口を追加。不正パスは 409 を返し、プロセスは落ちない。`/api/health` に検証結果を出す。
 - UI: `app/pages/settings.vue` に 2 パス設定、エラーバナー。
 - git 同期の規則: 書き出し先を git 対象（repo の時のみ有効、それ以外は「Git 管理外」）。読み出しは書き出し先優先→データセット fallback。CLI（2 パス未指定）は従来動作。詳細は `docs/ARCHITECTURE.md`。
@@ -16,7 +16,7 @@
 - `npm run generate:tauri`（nuxt generate）OK
 - `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 11 passed（設定 roundtrip・検証・破損ファイル、sidecar 起動停止・グループ kill・早期終了・Node 無し等）
 - 手動 E2E（xvfb でリリースバイナリ起動）:
-  - 実在パス（データセット直下に monks/ と sources/、書き出し先は別 dir）: `/api/health` が両パス ok、`/api/entities/monks` が両方の内容を 200 で返す。CLI 配置（PHRAPEDIA_ROOT/data）も従来どおり 200
+  - 実在パス（root 直下に data/monks と sources/、書き出し先は別 root）: `/api/health` が両パス ok、`/api/entities/monks` が両方の内容を 200 で返す。CLI 配置（PHRAPEDIA_ROOT/data）も従来どおり 200
   - 存在しないパス: アプリ・sidecar は起動、health がパスごとのエラーを返し、entities は 409。アプリ終了後に sidecar・ポートとも残存なし
 
 ### Linux build
@@ -50,7 +50,7 @@
 
 ## レビュー (review worker)
 
-対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体。仕様は B 案（パス直下に `monks/` `temples/` `amulets/` と `sources/` を直置き＝`data/` 相当そのもの。書き出し先も同じ）で確定。途中で入った A への差し戻し（7c82306）を revert して B に戻し、全体を B で一貫させて再確認した。
+対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体。途中で A レイアウト（root 配下に `data/<kind>/` と `sources/`）へ戻す revert 3 件（7c82306）が入ったため、rebase 後の HEAD で再確認した。
 
 ### 指摘一覧
 | # | severity | 内容 | 修正 |
@@ -61,7 +61,7 @@
 | 4 | info | アプリが SIGKILL された場合、`parent-watch` で node は最大 3 秒で終了するが、node の子（`agy` 等）は残りうる | 未修正（影響小。下記） |
 | 5 | info | `safeJoin` は字句的検証のみ。`sources/` 内の symlink が外を指す場合は辿る（データセットはユーザー選択パスのため許容範囲） | 未修正（server/ は最小修正方針） |
 | 6 | info | CSP の `script-src` に `'unsafe-eval'`（Nuxt dev 用の可能性）。本番で必要かは未検証 | 未修正 |
-| 7 | high | A 差し戻し（7c82306）で server / README / 設定画面説明 / ARCHITECTURE / report が B 仕様とずれた。`dataDir` / `sourcesDir` / `exportDataDir` の B 配置を検証するテストも無かった | 済（7c82306 を revert、README・`PathsCard.vue` を B に統一、`tests/layout.test.ts` 追加。ARCHITECTURE / CLAUDE.md / report も B で一貫を確認） |
+| 7 | medium | A 案確定（root 直下に `data/<kind>/` と `sources/`）後も README の設定表（「`data/` 相当のフォルダ」「直下に `monks/`」）と設定画面の説明文が B のまま。`exportDataDir()` の A 配置を検証するテストも無かった | 済（README・`PathsCard.vue` を A に統一、`tests/layout.test.ts` 追加。ARCHITECTURE / CLAUDE.md / 本レポートは A で一貫を確認） |
 
 観点別の結論: slug は `assertSlug`（`/` `\` `.` 先頭を拒否）、`sources/` は `safeJoin` で検証済み。設定ファイル破損は既定値 + 警告で起動継続（テストあり）。書込不可の書き出し先は実書込プローブで検出。Node 不在は起動失敗としてエラーバナー表示。cask / workflow / `tauri.conf.json` は整合（`productName` Phrapedia、version 0.1.0、identifier `jp.grrow.phrapedia`、成果物 `Phrapedia_<version>_{aarch64,x64}.dmg`、sha256 は `update-cask.mjs` が dmg から計算して埋める、arch 切替は `arch arm:/intel:`）。`render.yaml` / `scripts/render-start.mjs` は無変更、CLI 起動（env 未設定）は従来どおり動作。
 
@@ -70,7 +70,7 @@
 - `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 12 passed（修正で 1 件追加）
 - `npm run tauri:build` 成功（Linux: deb / rpm / AppImage）
 - `actionlint .github/workflows/release.yml` エラー 0（初回確認時。以降 release.yml は無変更。バイナリ再取得は権限拒否のため再実行せず）
-- 手動（`.output/server` を env で直接起動）: 2 パス指定（データセット直下に `monks/` と `sources/`、書き出し先は別 dir）で `/api/health` ok、`/api/entities/monks` 200、POST で作成したレコードは書き出し先 `<export>/monks/` にのみ出力（データセット側は無変更）。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
+- 手動（`.output/server` を env で直接起動）: 2 パス指定（各 root。データセット側に `data/monks/` と `sources/`）で `/api/health` ok、`/api/entities/monks` 200、POST で作成したレコードは書き出し先 `<export>/data/monks/` にのみ出力（データセット側は無変更）。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
 
 ### 未解決
 - macOS 実機・ワークフロー実走・`brew audit` は未確認（Linux 環境のため）。dmg 名は初回タグで要確認。
@@ -78,8 +78,8 @@
 
 ## docs 文言・不要ファイル整理（仕上げ）
 
-- README の設定リファレンス表（データセットパス / 書き出し先パス）の文言を修正（現在は B 案: `data/` 相当のフォルダ直下に `monks/` 等と `sources/`）。
-- `data/.{0,4}相当|直下に.{0,6}monks` を README / CLAUDE.md / docs / app で全数確認。（当時は A 案に合わせた確認。現在は B 案で再確認済み。）
+- README の設定リファレンス表（データセットパス / 書き出し先パス）を A 案（直下に `data/<kind>/` と `sources/` を持つ root）の文言に修正。
+- `data/.{0,4}相当|直下に.{0,6}monks` を README / CLAUDE.md / docs / app で全数確認。残りは本 report の A 案文脈（19 行目）のみ。
 - 既定値（アプリデータ dir 配下 `dataset`、書き出し先 = データセットと同じ）は `src-tauri/src/lib.rs` の `resolve_paths` と一致。
 - `src-tauri/icons/android` `ios` を削除（`tauri.conf.json` の `bundle.icon` は参照なし）。
 - `src-tauri/gen/` は `tauri build` / `cargo check` が自動生成する schema のため `.gitignore` に追加し追跡解除（残す必要なし）。
@@ -87,7 +87,7 @@
 
 ## docs-review 検証（HEAD 7ab4e13、別 clean clone）
 
-- 文言: `data/.{0,4}相当|直下に.{0,6}monks`、`相当`、`data-equivalent` を README / CLAUDE.md / docs / app で確認。（当時の確認。現在の仕様は B 案で、レビュー節の再確認を参照。）
+- 文言: `data/.{0,4}相当|直下に.{0,6}monks`、`相当`、`data-equivalent` を README / CLAUDE.md / docs / app で確認。残りは本 report の A 案文脈（19 / 72 / 81 行目）のみ。B 案の残存なし。
 - 既定値: README 表と UI（PathsCard.vue）の記述は `lib.rs` の `resolve_paths`（アプリデータ dir 配下 `dataset`）と `settings.rs` の `effective_export`（空 = データセットと同じ）に一致。
 - clean clone で `npm ci` / `npm test` 57 passed / `npm run typecheck` exit 0（vue-router/volar 警告のみ）/ `cargo check` 成功 / `npm run tauri:build` 成功（deb / rpm / AppImage）。ビルド後 `git status` は clean（`src-tauri/gen` は ignore され再生成される）。
 - 削除した `icons/android` `ios` と `src-tauri/gen` への参照は `.github` / `tauri.conf.json` / capabilities に無し。追跡ファイルの欠けなし。

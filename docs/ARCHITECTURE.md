@@ -128,16 +128,16 @@ updated_at: 2026-11-05T00:00:00.000Z
 
 | 設定 | 意味 | 既定 | sidecar への渡し方 |
 |---|---|---|---|
-| データセットパス | 読み出し元。`data/` 相当のフォルダで、直下に `monks/` `temples/` `amulets/` の Markdown と `sources/` を置く | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
-| 書き出し先パス | 書き込み先。同じく `data/` 相当のフォルダ（直下に `monks/` 等）。git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
+| データセットパス | 読み出し元の root。直下に `data/<kind>/`（`monks` `temples` `amulets` の Markdown）と `sources/` を持つ（現行 `PHRAPEDIA_ROOT` と同じ配置） | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 書き込み先の root（同じ配置の `data/<kind>/`）。git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
 
 - 保存先: Tauri app config dir の `settings.json`。再起動後も保持する。読み書きは Tauri command（`get_path_settings` / `save_path_settings` など）。フォルダ選択は `tauri-plugin-dialog`。
-- **2 パス未指定（CLI）の時は従来動作**: `PHRAPEDIA_ROOT`（既定 cwd）配下の `data/` と `sources/`（設定の `dataDir` / `sourcesDir`）を使う。`PHRAPEDIA_DATASET_PATH` が設定されている時だけデスクトップ配置になり、その場合 `dataDir` / `sourcesDir` 設定は無視される。
+- 2 パス未指定（CLI）の時は従来動作: `PHRAPEDIA_ROOT`（既定 cwd）配下を使う。`dataDir` / `sourcesDir` 設定は両モードで root からの相対位置として有効。
 - 検証: 「絶対パスでない」「存在しない」「ディレクトリでない」「書き込めない（書き出し先）」を検出し、UI（設定ページとエラーバナー）に表示する。**不正パスでもアプリと sidecar は落とさず起動**し、該当 API は 409 を返す。
 
 ### 読み書きと git 同期の規則
 
 1. 書き込み（保存・削除・リネーム）は常に書き出し先。データセット側のファイルは変更・移動・削除しない（読み取り専用でも使える）。
 2. 読み出しは書き出し先を優先し、同じ slug が書き出し先に無ければデータセットへ fallback する。一覧はデータセット → 書き出し先の順にマージし、同 slug は書き出し先が勝つ。`sources/` はデータセット側のみ。
-3. **git 操作（commit / pull / push）の対象は書き出し先**。書き出し先が git リポジトリ（作業ツリー内）の時だけ有効。リポジトリでなければ同期 UI は「Git 管理外」と表示し、commit / pull / push は実行せず失敗扱いを返す。書き出し先直下を丸ごとステージする。
-4. 書き出し先 = データセットパスの時は読み書きとも同一ディレクトリで、従来（読み出し元を直接 git 管理）と同じ挙動になる。
+3. **git 操作（commit / pull / push）の対象は書き出し先**。書き出し先が git リポジトリの時だけ有効。リポジトリでなければ同期 UI は「Git 管理外」と表示し、commit / pull / push は実行しない。ステージするのは書き出し先配下の data ディレクトリのみ。
+4. 書き出し先 = データセットパスの時は読み書きとも同一 root で、従来（読み出し元を直接 git 管理）と同じ挙動になる。
