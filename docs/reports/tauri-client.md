@@ -83,3 +83,11 @@
 - `src-tauri/icons/android` `ios` を削除（`tauri.conf.json` の `bundle.icon` は参照なし）。
 - `src-tauri/gen/` は `tauri build` / `cargo check` が自動生成する schema のため `.gitignore` に追加し追跡解除（残す必要なし）。
 - 検証: `npm test` 57 passed / `npm run typecheck` exit 0 / `cargo check` 成功。
+
+## docs-review 検証（HEAD 7ab4e13、別 clean clone）
+
+- 文言: `data/.{0,4}相当|直下に.{0,6}monks`、`相当`、`data-equivalent` を README / CLAUDE.md / docs / app で確認。残りは本 report の A 案文脈（19 / 72 / 81 行目）のみ。B 案の残存なし。
+- 既定値: README 表と UI（PathsCard.vue）の記述は `lib.rs` の `resolve_paths`（アプリデータ dir 配下 `dataset`）と `settings.rs` の `effective_export`（空 = データセットと同じ）に一致。
+- clean clone で `npm ci` / `npm test` 57 passed / `npm run typecheck` exit 0（vue-router/volar 警告のみ）/ `cargo check` 成功 / `npm run tauri:build` 成功（deb / rpm / AppImage）。ビルド後 `git status` は clean（`src-tauri/gen` は ignore され再生成される）。
+- 削除した `icons/android` `ios` と `src-tauri/gen` への参照は `.github` / `tauri.conf.json` / capabilities に無し。追跡ファイルの欠けなし。
+- 未実施: `actionlint .github/workflows/release.yml`。本環境に actionlint が無く、docker daemon も無い。バイナリ取得は権限で拒否されたため未実行。
