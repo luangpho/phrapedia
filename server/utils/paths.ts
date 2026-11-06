@@ -12,14 +12,9 @@ export function projectRoot(): string {
   return process.cwd()
 }
 
-/** Desktop (Tauri) mode = the two-path settings are in use. CLI mode (env unset) keeps the legacy layout. */
-export function isDesktopMode(): boolean {
-  return !!process.env.PHRAPEDIA_DATASET_PATH
-}
-
 /**
- * Dataset root. Desktop (Tauri) app: PHRAPEDIA_DATASET_PATH = the data/ equivalent directory
- * (<kind>/*.md and sources/ directly inside). CLI: unset, so it equals projectRoot() (data/ lives under it).
+ * Dataset root = directory holding data/<kind>/*.md and sources/ (read side).
+ * Desktop (Tauri) app: PHRAPEDIA_DATASET_PATH. CLI: unset, so it equals projectRoot().
  */
 export function datasetRoot(): string {
   const env = process.env.PHRAPEDIA_DATASET_PATH
@@ -27,7 +22,7 @@ export function datasetRoot(): string {
 }
 
 /**
- * Export root = directory records are written to (data/ equivalent); also the git target for sync.
+ * Export root = directory records are written to; also the git working tree for sync.
  * Desktop (Tauri) app: PHRAPEDIA_EXPORT_PATH. Unset or empty = same as datasetRoot().
  */
 export function exportRoot(): string {
