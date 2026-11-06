@@ -128,8 +128,8 @@ updated_at: 2026-11-05T00:00:00.000Z
 
 | 設定 | 意味 | 既定 | sidecar への渡し方 |
 |---|---|---|---|
-| データセットパス | `monks/` `temples/` `amulets/` の Markdown と `sources/` の読み出し元（`data/` 相当） | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
-| 書き出し先パス | 保存・削除・リネーム先、および git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
+| データセットパス | 読み出し元のルート。配下の `data/{monks,temples,amulets}/` の Markdown と `sources/`（従来のプロジェクトルート相当） | アプリデータ dir 配下 `dataset` | 環境変数 `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 保存・削除・リネーム先ルート（配下に同じ相対位置の `data/`）、および git 操作の対象 | データセットパスと同じ | 環境変数 `PHRAPEDIA_EXPORT_PATH` |
 
 - 保存先: Tauri app config dir の `settings.json`。再起動後も保持する。読み書きは Tauri command（`get_path_settings` / `save_path_settings` など）。フォルダ選択は `tauri-plugin-dialog`。
 - 受け口: `server/utils/paths.ts` の `datasetRoot()` / `exportRoot()`。環境変数が無い（CLI）場合は従来のプロジェクトルートと同一で挙動は変わらない。
