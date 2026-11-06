@@ -38,17 +38,43 @@ jobs:
 
       - run: npm ci
 
-      # APPLE_* secrets が未設定なら空文字になり、署名・notarization はスキップされる
-      - name: Build and publish (tauri-action)
-        uses: tauri-apps/tauri-action@v0
+      # 署名 secrets は tauri-action の env に直接渡さない。未登録の secret は空文字になるが、
+      # 空でも環境変数が「定義済み」になり tauri bundler が署名を試みて失敗するため。
+      # 空でないものだけ GITHUB_ENV に export し、全て未設定なら APPLE_* が unset のまま
+      # 未署名でビルドされる。
+      - name: Export Apple signing env
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          exported=0
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            value="${!name:-}"
+            if [ -n "${value}" ]; then
+              # delimiter 形式: 複数行の値でも GITHUB_ENV を壊さない（値はログに出さない）
+              delim="EOF_${name}_${RANDOM}${RANDOM}"
+              {
+                printf '%s<<%s\n' "${name}" "${delim}"
+                printf '%s\n' "${value}"
+                printf '%s\n' "${delim}"
+              } >> "${GITHUB_ENV}"
+              exported=$((exported + 1))
+            fi
+          done
+          if [ "${exported}" -eq 0 ]; then
+            echo "署名 secrets 未設定のため未署名でビルド"
+          fi
+
+      - name: Build and publish (tauri-action)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Phrapedia ${{ github.ref_name }}
