@@ -24,6 +24,5 @@
 - macOS バイナリは未作成（GitHub Actions 担当）。
 
 ### 未解決
-- Node は `PATH` 上の `node` 依存（Homebrew 前提）。Node 不在時は UI にエラー表示のみ。
+- Node は `PATH` 上の `node` 依存（Homebrew 前提）。Node 不在時の挙動は cargo test（`missing_entry_is_an_error_not_a_panic` 等）の範囲のみ検証。
 - GUI（WebView 内の操作）の目視確認は未実施。xvfb での起動と API 応答のみ確認。
-- `.output/server` は resources に同梱するが、sidecar の `node_modules` 依存は Nitro の trace 出力に含まれるもののみ。
