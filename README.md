@@ -197,8 +197,8 @@ brew install --cask phrapedia
 
 | 項目 | 意味 | 既定値 | sidecar への渡し方 |
 |---|---|---|---|
-| データセットパス | 読み出し元ルート。配下の `data/{monks,temples,amulets}/` と `sources/` を読む | アプリデータ dir 配下 `dataset` | `PHRAPEDIA_DATASET_PATH` |
-| 書き出し先パス | 保存・削除・リネーム先ルート。Git 同期の対象 | データセットパスと同じ | `PHRAPEDIA_EXPORT_PATH` |
+| データセットパス | 読み出し元。`data/` 相当のフォルダ（直下に `monks/` `temples/` `amulets/` と `sources/`） | アプリデータ dir 配下 `dataset` | `PHRAPEDIA_DATASET_PATH` |
+| 書き出し先パス | 書き込み先。同じく `data/` 相当のフォルダ。Git 同期の対象（git リポジトリの時のみ） | データセットパスと同じ | `PHRAPEDIA_EXPORT_PATH` |
 
 存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
 
