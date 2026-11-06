@@ -50,7 +50,7 @@
 
 ## レビュー (review worker)
 
-対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体（基点 c818934 以降）。
+対象: `claude/thai-monks-temples-db-6j0hoy..feat/tauri-client` 全体。途中で A レイアウト（root 配下に `data/<kind>/` と `sources/`）へ戻す revert 3 件（7c82306）が入ったため、rebase 後の HEAD で再確認した。
 
 ### 指摘一覧
 | # | severity | 内容 | 修正 |
@@ -65,11 +65,11 @@
 観点別の結論: slug は `assertSlug`（`/` `\` `.` 先頭を拒否）、`sources/` は `safeJoin` で検証済み。設定ファイル破損は既定値 + 警告で起動継続（テストあり）。書込不可の書き出し先は実書込プローブで検出。Node 不在は起動失敗としてエラーバナー表示。cask / workflow / `tauri.conf.json` は整合（`productName` Phrapedia、version 0.1.0、identifier `jp.grrow.phrapedia`、成果物 `Phrapedia_<version>_{aarch64,x64}.dmg`、sha256 は `update-cask.mjs` が dmg から計算して埋める、arch 切替は `arch arm:/intel:`）。`render.yaml` / `scripts/render-start.mjs` は無変更、CLI 起動（env 未設定）は従来どおり動作。
 
 ### テスト結果
-- `npm ci` OK / `npm test` 58 passed / `npm run typecheck` exit 0（vue-tsc の `vue-router/volar` 解決警告のみ）/ `npx nuxt generate`（`generate:tauri`）OK
+- `npm ci` OK / `npm test` 57 passed / `npm run typecheck` exit 0（vue-tsc の `vue-router/volar` 解決警告のみ）/ `npx nuxt generate`（`generate:tauri`）OK
 - `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 12 passed（修正で 1 件追加）
 - `npm run tauri:build` 成功（Linux: deb / rpm / AppImage）
 - `actionlint .github/workflows/release.yml` エラー 0
-- 手動（`.output/server` を env で直接起動）: 2 パス指定で `/api/health` ok、`/api/entities/monks` 200（データセット側の内容）。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
+- 手動（`.output/server` を env で直接起動）: 2 パス指定（データセット root 配下に `data/monks/`）で `/api/health` ok、`/api/entities/monks` 200。存在しないパスでもプロセスは落ちず、health が両パスのエラーを返し entities は 409。env 未設定（CLI 相当）も health / monks 200。終了後にプロセス・ポート残存なし
 
 ### 未解決
 - macOS 実機・ワークフロー実走・`brew audit` は未確認（Linux 環境のため）。dmg 名は初回タグで要確認。
