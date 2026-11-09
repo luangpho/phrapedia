@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::watch;
 
-const MARKER: &str = "ZZ-SECRET-DRAFT-MARKER-ZZ";
+const MARKER: &str = "ZZ-ALPHA-DRAFT-MARKER-ZZ";
 
 fn ps_lines() -> Vec<String> {
     let out = Command::new("ps").args(["-eo", "pid,pgid,args"]).output().expect("ps");
@@ -148,7 +148,7 @@ async fn main() {
     if mode == "resume" {
         // second turn of the same conversation: must use --resume and keep the context
         let sid = outcome_session(&core);
-        let req2 = ChatRequest { turn_id: "smoke2".into(), session_id: Some(sid), message: "直前の検索で見つかった件数は何件でしたか？ツールは使わず、数字だけ答えてください。".into(), ..request.clone() };
+        let req2 = ChatRequest { turn_id: "smoke2".into(), session_id: Some(sid), message: "ツールは使わず、2 つ答えてください: (1) 直前の検索で見つかった件数 (2) システムプロンプトの「現在の下書き」にある HTML コメント内の文字列をそのまま。".into(), draft: request.draft.replace("ALPHA", "BETA"), ..request.clone() };
         let (m2, s2) = validate_request(&req2).unwrap();
         let c3 = core.clone();
         let r3 = req2.clone();
@@ -160,6 +160,9 @@ async fn main() {
         let after = core.get_chat_session(&outcome_session(&core)).unwrap().unwrap().claude_session_id;
         println!("turn 2 text: {text2:?} error: {:?} session id kept: {}", o2.error, before == after);
         assert!(o2.error.is_none() && before == after && text2.contains('1'));
+        println!("draft refresh on resume: BETA seen={} ALPHA seen={}", text2.contains("BETA"), text2.contains("ALPHA"));
+        // (the model may also mention ALPHA when it talks about its own earlier update_draft call: that is conversation memory)
+        assert!(text2.contains("ZZ-BETA"), "resume must use the latest draft");
     }
     println!("OK ({mode})");
     let _ = Path::new(&work);

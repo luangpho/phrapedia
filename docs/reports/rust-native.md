@@ -196,3 +196,8 @@ GUI は不要。バイナリのパスと、アプリが使っている設定 dir
 - `web_research` / `sync_data` の実行（MCP 経由の引数検証と単体テストのみ。実 CLI / remote は未実行）。
 - `--system-prompt-file` が `--help` の一覧に出ない点は将来の CLI 変更で変わりうる（実機では 2.1.317 で有効）。
 - tool-result の切り詰めは JS の UTF-16 長ではなく文字数基準（上限値は同じ 20,000）。
+
+### 追記（レビュー対応）
+- `chat_send` の `request` は `serde_json::Value` で受けて手動で解析（`parse_request`）。kind 不正・message 欠落などは Tauri の文字列エラーでなく構造化 `invalid_argument` で reject する。
+- resume 時の下書き反映を実機確認: 2 ターン目の下書きを `ALPHA`→`BETA` に変えて聞くと、`--system-prompt-file` + `--resume` でも `BETA`（最新）が system prompt に反映される（モデルが自分の過去の update_draft として `ALPHA` に言及することはある = 会話履歴）。
+- frontend の `useChat.ts` は `session` 前の `error` イベントも処理する（grep で確認）。
