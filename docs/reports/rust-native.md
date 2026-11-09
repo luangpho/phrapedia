@@ -5,6 +5,13 @@ branch: `feat/rust-native`。実行時の Node / Nitro / PGlite を無くし、W
 
 契約（command 名・引数・戻り値・エラー型・`ChatStreamEvent`・MCP 起動形）は [docs/NATIVE_API.md](../NATIVE_API.md)。
 
+## 全体サマリ
+
+- 実行時の Node / Nitro / PGlite を撤去し、Rust（Tauri v2 の command 層 + core + claude -p の Rust 実装）と WebView の Nuxt SPA だけで動く構成にした。外部クライアント向けは HTTP `/mcp` の代わりに `phrapedia mcp`（stdio）。
+- 既定 branch の PR #5（チャット claude -p 化）・PR #6（更新アイコン）・0.1.3 版上げを merge で取り込み済み（version 0.1.3）。
+- Linux/204 で `npm test` 83 件、`cargo test` 143+3 件、clippy `-D warnings`、`tauri:build`（deb/rpm/AppImage + updater 署名）、xvfb 30 秒起動、node 無し PATH 起動、`phrapedia mcp` stdio、実 claude でのチャット往復を確認。詳細は integrate 節。
+- 非互換: 旧 PGlite データは移行しない／HTTP `/mcp` 廃止／ブラウザ版（Web 版）は旧 branch のまま。
+
 ## core 節
 
 ### 構成
@@ -208,3 +215,33 @@ GUI は不要。バイナリのパスと、アプリが使っている設定 dir
 - `chat_send` の `request` は `serde_json::Value` で受けて手動で解析（`parse_request`）。kind 不正・message 欠落などは Tauri の文字列エラーでなく構造化 `invalid_argument` で reject する。
 - resume 時の下書き反映を実機確認: 2 ターン目の下書きを `ALPHA`→`BETA` に変えて聞くと、`--system-prompt-file` + `--resume` でも `BETA`（最新）が system prompt に反映される（モデルが自分の過去の update_draft として `ALPHA` に言及することはある = 会話履歴）。
 - frontend の `useChat.ts` は `session` 前の `error` イベントも処理する（grep で確認）。
+
+## integrate 節（結合・実 smoke・文書・PR）
+
+### 既定 branch の取り込み
+- `git merge origin/claude/thai-monks-temples-db-6j0hoy`（rebase なし）。PR #5（3aed4c9）・PR #6（91cd7cc）・0.1.3（08a01bc）を取り込み、version は 0.1.3 のまま（package.json / package-lock.json / tauri.conf.json / Cargo.toml / Cargo.lock）。version は上げていない。
+- 衝突は rust-native 側（Node 撤去後）を基本に解決。PR #5 の claude CLI 案内、PR #6 の更新アイコン、README「更新方法」は文書に残した。`.mcp.json`（HTTP /mcp 向け）は削除。
+- release.yml / tauri.updater.conf.json（pubkey）/ identifier / productName / 成果物名は既定 branch と同一。tauri.conf.json は beforeBuildCommand を `npm run generate` に、CSP から 127.0.0.1 を除去（frame-src blob: を追加）。
+
+### smoke 結果（Linux/204）
+- `npm ci` / `npm test`（6 files・83 tests pass）/ `npm run typecheck`（exit 0・TS エラー 0。vue-tsc が `vue-router/volar/sfc-route-blocks` の解決警告を出すが失敗にならない。vue-router 4.6.4 側の exports 由来で、今回の変更とは無関係）。
+- `cargo check` / `cargo clippy --all-targets -- -D warnings` / `cargo test`（lib 143 + 3 pass）。
+- `npm run tauri:build`（updater overlay 付き）で deb / rpm / AppImage と各 .sig を生成。バンドルはバイナリのみで `.output/server` は無い。
+- xvfb で PATH から node / npx を外した環境（PATH は gh スタブのみ）で 30 秒起動してクラッシュなし（timeout で終了、exit 124）。
+- `phrapedia mcp --config-dir --data-dir` に stdio で initialize → tools/list（11 tool）→ tools/call(list_entities) を流し、同梱 data/ のコピーで monks 2 件を確認。
+- 同梱 data/ の全レコード（monks 2・temples 2）を MCP の save_entity で保存し直し、差分は updated_at のみ。
+- 実 claude（~/.local/bin/claude）でチャット 1 往復（examples、CLAUDECODE 系 env を除去）: tool-start / tool-result / draft / text-delta / 完了を確認。実行中の ps に system prompt・MCP 設定の中身は出ず、終了後に子・孫プロセスなし。
+- git 同期（一時 repo／bare remote）、sources 検索、設定 2 パスの検証（存在しない／書けないパス、データ dir がリポジトリ外）は Rust テスト（core::git / core::path_settings / core::sources）で確認。
+- `scripts/release.sh --dry-run 0.1.4`（bare repo + gh スタブ）が完走。release.yml は js-yaml で parse し、build / cask 両 job の run 部を確認（HOMEBREW_TAP_TOKEN / HOMEBREW_TAP_SSH_KEY の分岐、updater 署名の有無の両分岐を維持）。Cask は `depends_on formula "node"` なし、tests/update-cask.test.ts pass。
+
+### 非互換
+- 旧 PGlite データ（チャット履歴・FTS・調査キャッシュ）は移行しない。レコードと一次資料は Markdown なのでそのまま使える。
+- HTTP `/mcp` 廃止（`phrapedia mcp` stdio へ）。
+- デスクトップ専用。ブラウザ版・Render 配備は旧 branch のまま。`start` / `start:render` / `build` / `preview` / render.yaml / scripts/render-start.mjs は残置（この構成では動かない。削除は未判断）。
+
+### 未検証
+- macOS / Windows 実機（署名・notarize・dmg・updater の実更新・GUI 起動 PATH での claude 解決）。
+- GUI からの chat_send（Tauri 実機 + Channel）。chat 往復は core の example で確認。
+- 外部クライアント（Claude Code 以外）との MCP 接続。web_research（agy）・sync_data（実 remote）の実行。
+- GitHub Actions 上での release workflow 実行（ローカルでは YAML parse と run 部確認、release.sh は dry-run まで）。
+- src-tauri 内に旧 Nitro 実装を指すコメント（tools.rs / commands/mod.rs / git.rs / store.rs / path_settings.rs の "sidecar"）が残る。履歴説明なので触っていない。
