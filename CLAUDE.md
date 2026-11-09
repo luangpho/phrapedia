@@ -22,7 +22,8 @@ npm run tauri:build # デスクトップアプリのビルド（src-tauri/tauri.
 
 ## 配布
 - release は `scripts/release.sh <version>` の 1 コマンド（版上げ commit・push・tag・workflow 待ちまで）。タグ `v*` の push で `.github/workflows/release.yml` が macOS（aarch64 / x64）を tauri-action でビルドし、GitHub Release に `.dmg` を添付。署名は ad-hoc が既定（`APPLE_*` secret があれば署名・notarization）。
-- アプリ内更新（tauri updater）は `src-tauri/tauri.updater.conf.json` の pubkey と secret `TAURI_SIGNING_PRIVATE_KEY` が両方ある時だけ有効（`.app.tar.gz` / `.sig` / `latest.json` を添付）。
+- アプリ内更新（tauri updater）は `src-tauri/tauri.updater.conf.json` の pubkey と secret `TAURI_SIGNING_PRIVATE_KEY` が両方ある時だけ有効（`.app.tar.gz` / `.sig` / `latest.json` を添付）。フロントは Tauri command `updater_enabled`（`plugins.updater` の有無。plugin の条件付き登録と同じ判定）が true の時だけサイドバーの更新アイコン（`UpdateButton.vue`）を出す。
+- 更新の起動はアイコン押下のみ（`app/composables/useUpdater.ts` の状態機械）。起動時と 6 時間ごとの `check()` は静かに行い、自動ダイアログは出さない。確認は `confirmDialog`（`window.confirm` は WKWebView で動かない）。権限不足の失敗は `brew upgrade --cask phrapedia` を案内。
 - Homebrew: `packaging/homebrew/Casks/phrapedia.rb`（`depends_on formula: "node"`）。`packaging/homebrew/update-cask.mjs` が version と sha256 を書き換え、`HOMEBREW_TAP_TOKEN` があれば `luangpho/homebrew-tap` へ push。
 - 成果物名は `Phrapedia_<version>_{aarch64,x64}.dmg`。`productName` / `version` を変えたら cask の `url` とワークフローのファイル名を合わせる。version は `package.json` / `Cargo.toml` / `tauri.conf.json` で揃える。
 - 手順の詳細は README の「リリース手順」。
