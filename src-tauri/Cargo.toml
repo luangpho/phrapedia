@@ -26,9 +26,8 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 unicode-normalization = "0.1"
-rmcp = { version = "3.9.0", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "3.9.0", features = ["server", "transport-io"] }
 tokio = { version = "1.54.1", features = ["process", "io-util", "time", "rt-multi-thread", "macros", "sync", "io-std"] }
-schemars = "1.2.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

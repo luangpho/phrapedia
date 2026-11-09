@@ -2491,7 +2491,6 @@ dependencies = [
  "libc",
  "rmcp",
  "rusqlite",
- "schemars 1.2.3",
  "serde",
  "serde_json",
  "serde_yaml_ng",
