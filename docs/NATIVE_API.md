@@ -74,6 +74,9 @@ interface AppInfo {
   datasetCheck: PathCheckView
   exportCheck: PathCheckView
   stateDir: string                 // SQLite の置き場
+  exePath: string                  // 実行バイナリの絶対パス（外部 MCP クライアントの stdio 設定表示用。取得不能なら空）
+  configDir: string                // app config dir（phrapedia mcp --config-dir に渡す値）
+  dataDir: string                  // app data dir（同 --data-dir）
 }
 interface PathSettingsView {       // 従来互換
   datasetPath: string; exportPath: string; effectiveExport: string

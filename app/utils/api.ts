@@ -120,6 +120,10 @@ export interface AppInfo {
   datasetCheck: PathCheckView
   exportCheck: PathCheckView
   stateDir: string
+  /** Absolute path of the app binary (empty when unknown) */
+  exePath: string
+  configDir: string
+  dataDir: string
 }
 
 export interface PathSettingsView {

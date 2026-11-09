@@ -80,14 +80,14 @@ branch: `feat/rust-native`。実行時の Node / Nitro / PGlite を無くし、W
 - チャット: `useChat` は `chat_send` に `turnId`（クライアント採番 UUID）+ Channel を渡す。`stop()` は `chat_abort` を呼び、バックエンドの `done`（停止メッセージ）を受けて終了。`reset()` / 記録切替 / unmount は `chat_abort` + Channel の handler を無効化（遅れて届くイベントを無視）。SSE パーサは削除。`applyChatStreamEvent` は不変。
 - 一次資料の画像 / PDF: markdown 内の相対パスは `#phra-src/<path>` のマーカー href に書き換え、`MarkdownView` が描画後に `read_source_bytes` → Blob URL へ差し替える（asset protocol は不使用）。`SourcesPreview` も同様。
 - デスクトップ層: `sidecar_info` / `setApiBase` / `window.fetch` の差し替え / `restart_sidecar` を廃止（`api-base.ts` 削除）。プラグインは `app_info` を読むだけ。`DesktopBanner` の「再試行」は `app_info` の再読込、`PathsCard` は「保存して再起動」→「保存」（トーストも更新）。
-- 画面: ホームの「MCP エンドポイント」カード（HTTP `/mcp` の URL 表示）を削除（HTTP MCP が無いため）。それ以外の画面・文言は維持。
+- 画面: ホームの「MCP エンドポイント」カードは HTTP `/mcp` の URL 表示から **stdio 設定例（command=実行バイナリの絶対パス、args=["mcp","--config-dir",…,"--data-dir",…]）のコピー表示**に書き換え（デスクトップ時のみ表示）。値は `app_info` に追加した `exePath` / `configDir` / `dataDir`（core の `AppInfo` への加算変更 + NATIVE_API.md 追記）から作る。それ以外の画面・文言は維持。
 - `shared/types`: `SettingsView.resolved.projectRoot` → `datasetRoot` / `exportRoot`、`ChatRequest.turnId` を追加。
 
 ### 削除物
 
 - `server/**` 全部（api / middleware / plugins / utils / mcp）、`scripts/smoke.mjs`、`.env.example`、`app/utils/api-base.ts`。
 - 依存: `@electric-sql/pglite` `@nuxtjs/mcp-toolkit` `simple-git` `gray-matter` `yaml` `zod`、devDependency `ai`（`@nuxt/ui` の optional peer で app 側は未使用）。lockfile は `npm install` で再生成。
-- scripts: `build` `preview` `start` `start:render` `smoke` `generate:tauri` `dev:tauri` を廃止。`dev` = `nuxt dev --port 1420`、`generate` = `nuxt generate`、`tauri:dev` = `tauri dev`、`tauri:build` は従来どおり。
+- scripts: `smoke` `generate:tauri` `dev:tauri` を廃止。`build` `preview` `start` `start:render` は **未変更で残置**（render 関連は未変更。`render.yaml` / `scripts/render-start.mjs` も削除せず、存続は利用者が merge 時に判断。web 版は旧 branch のまま。新 nuxt.config では `start` が参照する `.output/server` は生成されないため、この branch では動かない）。`dev` = `nuxt dev --port 1420`、`generate` = `nuxt generate`、`tauri:dev` = `tauri dev`、`tauri:build` は従来どおり。
 - `nuxt.config.ts`: `ssr:false` 固定、`PHRAPEDIA_TAURI` 分岐 / `mcp` / `runtimeConfig` のサーバ項目 / nitro externals / vite の pglite 設定を削除。出力先 `.output-frontend` は維持（`frontendDist` 不変）。`@nuxt/icon` は `provider:'none'`・`serverBundle:false`・`fallbackToApi:false`（client bundle のみ。旧 sidecar の icon API には依存しない）。
 - `tauri.conf.json`: `beforeDevCommand=npm run dev` / `beforeBuildCommand=npm run generate`、CSP から `http://127.0.0.1:*` を除き `frame-src blob:` を追加（PDF の iframe 用）。identifier / productName / version / updater は不変。
 - tests: server 依存の 10 ファイル（entities / frontmatter / gemini / path-validation / settings / layout / claude-cli / claude-stream / chat-turn / setup）を削除（Rust 側テストが対応）。

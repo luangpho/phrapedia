@@ -83,6 +83,11 @@ pub struct AppInfo {
     pub dataset_check: PathCheckView,
     pub export_check: PathCheckView,
     pub state_dir: String,
+    /// 実行バイナリの絶対パス（外部 MCP クライアントの stdio 設定用。取得できなければ空文字）
+    pub exe_path: String,
+    /// app config dir / app data dir（`phrapedia mcp --config-dir/--data-dir` に渡す値）
+    pub config_dir: String,
+    pub data_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -237,6 +242,9 @@ impl Core {
             dataset_check: v.dataset_check,
             export_check: v.export_check,
             state_dir: self.dirs.state_dir().to_string_lossy().into_owned(),
+            exe_path: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+            config_dir: self.dirs.config_dir.to_string_lossy().into_owned(),
+            data_dir: self.dirs.data_dir.to_string_lossy().into_owned(),
         }
     }
 

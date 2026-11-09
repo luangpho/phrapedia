@@ -17,6 +17,9 @@ export default defineNuxtPlugin(async () => {
       datasetCheck: { ok: true, error: null },
       exportCheck: { ok: true, error: null },
       stateDir: '',
+      exePath: '',
+      configDir: '',
+      dataDir: '',
       error: `アプリの状態を取得できません: ${errorMessage(err)}`,
     }
   }
