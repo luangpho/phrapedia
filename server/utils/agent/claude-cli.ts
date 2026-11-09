@@ -200,25 +200,25 @@ const STDERR_LIMIT = 8_000
 export function runClaudeProcess(opts: ClaudeProcessOptions): Promise<ClaudeProcessResult> {
   return new Promise((resolvePromise) => {
     const parser = new ClaudeStreamParser(opts.onEvent)
+    if (opts.signal?.aborted) {
+      resolvePromise({ ...parser.result(), aborted: true, exitCode: null, stderr: '' })
+      return
+    }
     let stderr = ''
     let aborted = false
     let timedOut = false
     let spawnError: string | undefined
     let killTimer: ReturnType<typeof setTimeout> | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
 
     const finish = (exitCode: number | null) => {
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
       if (killTimer) clearTimeout(killTimer)
       opts.signal?.removeEventListener('abort', onAbort)
       if (aborted || timedOut || !parser.finished) parser.markInterrupted()
       resolvePromise({ ...parser.result(), aborted: aborted || undefined, timedOut: timedOut || undefined, spawnError, exitCode, stderr: stderr.trim() })
     }
 
-    if (opts.signal?.aborted) {
-      aborted = true
-      finish(null)
-      return
-    }
 
     const child = spawn(resolveCommand(opts.command), opts.args, {
       cwd: claudeWorkDir(),
@@ -231,7 +231,7 @@ export function runClaudeProcess(opts: ClaudeProcessOptions): Promise<ClaudeProc
       killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
       killTimer.unref()
     }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true
       terminate()
     }, opts.timeoutMs)
