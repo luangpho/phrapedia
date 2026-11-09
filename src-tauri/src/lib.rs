@@ -263,8 +263,15 @@ fn stop_sidecar(app: &AppHandle) {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState(Mutex::new(Inner::default())))
         .setup(|app| {
+            // The updater plugin fails to initialize without `plugins.updater` (it is only merged in by
+            // tauri.updater.conf.json once a key is registered), so register it only when configured.
+            // Without it the frontend's check() rejects and is ignored.
+            if app.config().plugins.0.contains_key("updater") {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             // Start in the background so the window appears immediately; a failure never aborts startup.
             let handle = app.handle().clone();
             std::thread::spawn(move || start_sidecar(&handle));
@@ -279,4 +286,40 @@ pub fn run() {
             stop_sidecar(handle);
         }
     });
+}
+
+#[cfg(test)]
+mod updater_config_tests {
+    //! tauri.updater.conf.json is only merged in by the release workflow once a key is registered,
+    //! so a typo would otherwise surface only in a release build.
+    use serde_json::Value;
+
+    #[test]
+    fn updater_overlay_config_loads() {
+        let conf: Value = serde_json::from_str(include_str!("../tauri.updater.conf.json")).expect("valid JSON");
+        let cfg: tauri_plugin_updater::Config =
+            serde_json::from_value(conf["plugins"]["updater"].clone()).expect("plugins.updater deserializes into the plugin Config");
+        assert_eq!(
+            cfg.endpoints.iter().map(|u| u.as_str()).collect::<Vec<_>>(),
+            ["https://github.com/luangpho/phrapedia/releases/latest/download/latest.json"]
+        );
+        assert_eq!(conf["bundle"]["createUpdaterArtifacts"], Value::Bool(true));
+    }
+
+    #[test]
+    fn base_config_has_no_updater_and_is_ad_hoc_signed() {
+        let conf: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert!(conf["plugins"].get("updater").is_none(), "updater config must live in tauri.updater.conf.json");
+        assert_eq!(conf["bundle"]["macOS"]["signingIdentity"], "-");
+    }
+
+    #[test]
+    fn capabilities_allow_updater_and_relaunch() {
+        let caps: Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let perms: Vec<&str> = caps["permissions"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+        assert!(perms.contains(&"updater:default"));
+        assert!(perms.contains(&"process:allow-restart"));
+        assert!(perms.contains(&"dialog:allow-message"), "ask() goes through dialog message");
+        assert!(!perms.contains(&"process:default"), "process:default also grants exit");
+    }
 }

@@ -22,4 +22,6 @@ export default defineNuxtPlugin(async () => {
   const nativeFetch = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
     nativeFetch(typeof input === 'string' ? apiUrl(input) : input, init)
+  // fire and forget: never delays startup; failures are swallowed inside
+  void useUpdater().checkOnce()
 })

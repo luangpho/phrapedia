@@ -10,9 +10,16 @@ cask "phrapedia" do
   desc "Local-first knowledge base for Thai monks, temples and amulets"
   homepage "https://github.com/luangpho/phrapedia"
 
+  auto_updates true
+
   depends_on formula: "node"
 
   app "Phrapedia.app"
+
+  preflight_steps do
+    # ad-hoc 署名アプリのため quarantine 属性のみ除去する（再署名は hardened runtime のフラグを壊すため行わない）
+    run "xattr", args: ["-dr", "com.apple.quarantine", "{{staged_path}}/Phrapedia.app"]
+  end
 
   zap trash: [
     "~/Library/Application Support/jp.grrow.phrapedia",

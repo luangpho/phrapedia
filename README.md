@@ -115,8 +115,8 @@ brew install --cask phrapedia
 
 - cask は `depends_on formula: "node"` を持つので、Homebrew の `node` も一緒に入ります。アプリは `node` を子プロセス（sidecar）として起動します。
 - 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
-- 署名・notarization が未設定のビルドは Gatekeeper に止められることがあります（[署名・notarization の設定](#署名notarization-の設定)）。
-- 更新: `brew upgrade --cask phrapedia`。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
+- インストール後そのまま起動できます。cask がインストール時に隔離属性（quarantine）を外します（ad-hoc 署名のビルド）。
+- 更新: `brew upgrade --cask phrapedia`、またはアプリ起動時の更新確認。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
 - 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。API キー（`NUXT_ANTHROPIC_API_KEY` 等）は、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
 ## 情報の優先順位
@@ -321,22 +321,48 @@ npm run tauri:build # デスクトップアプリをビルド（src-tauri/target
 
 ## リリース手順
 
-1. `package.json` / `src-tauri/Cargo.toml` / `src-tauri/tauri.conf.json` の `version` を揃えて更新し、コミット・push する。
-2. タグを打って push する（`v` + version。version と一致させること）。
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-3. `.github/workflows/release.yml` が走り、macOS（aarch64 / x86_64）をビルドして GitHub Release に添付する。
-   - `Phrapedia_<version>_aarch64.dmg` / `Phrapedia_<version>_x64.dmg`
-   - `Phrapedia_<version>_aarch64.app.tar.gz` / `Phrapedia_<version>_x64.app.tar.gz`
-4. 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_SSH_KEY`（推奨）か `HOMEBREW_TAP_TOKEN` のどちらかが必要で、両方無ければこのジョブはスキップされる（両方あれば SSH 鍵を優先）。
-5. 手動で cask を更新する場合:
-   ```bash
-   node packaging/homebrew/update-cask.mjs --version 0.1.0 \
-     --arm-dmg Phrapedia_0.1.0_aarch64.dmg --intel-dmg Phrapedia_0.1.0_x64.dmg
-   # sha256 を直接渡す場合は --arm-sha / --intel-sha。別ファイルは --cask <path>
-   ```
+利用者の macOS 端末で **1 コマンド**です（`git` / `node` / `npm` / `gh`（`gh auth login` 済み）が必要）。
+
+```bash
+scripts/release.sh 0.1.1            # 版は x.y.z（v は付けない）
+scripts/release.sh --dry-run 0.1.1  # push・tag 以外を全部行う（確認用）
+```
+
+スクリプトは次を順に行います。手作業の版上げ・タグ打ちは不要です。
+
+1. 引数と重複の検査（版の形式、同名の release / tag、`gh auth status`）。
+2. 既定 branch を一時 dir に新規 clone し、`npm ci` / `npm test` / `npm run typecheck`。
+3. `package.json` / `package-lock.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` の version を揃えて 1 commit（`phrapedia <version>`）。各ファイルの変更行数が想定どおりかを確認してから commit する。
+4. 既定 branch と tag `v<version>` を push し、release workflow の完了を待つ。成功したら `gh release view` と tap の `Casks/phrapedia.rb` の version を表示し、一時 dir を消す。
+
+ビルドは GitHub Actions（`.github/workflows/release.yml`）が行い、ローカルでは `tauri build` しません。
+
+- macOS（aarch64 / x86_64）をビルドし、GitHub Release に `Phrapedia_<version>_{aarch64,x64}.dmg` を添付する。
+- 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_SSH_KEY`（推奨）か `HOMEBREW_TAP_TOKEN` のどちらかが必要で、両方無ければこのジョブはスキップされる（両方あれば SSH 鍵を優先）。`HOMEBREW_TAP_TOKEN` は設定済みで、fine-grained token への差し替えは不要。
+- アプリ内更新の鍵が登録済みなら、さらに `Phrapedia_<version>_{aarch64,x64}.app.tar.gz` / `.sig` と `latest.json`（`darwin-aarch64` / `darwin-x86_64` の両方入り）が添付される（下記）。
+
+### 更新方法
+
+- 利用者: `brew upgrade --cask phrapedia`。
+- アプリ内更新: 起動時に 1 回だけ更新を確認し、あれば確認ダイアログを出して、更新・再起動する。更新の確認・配布には署名鍵が使われる（下記）。確認に失敗した場合（オフライン等）は黙って無視される。
+
+### アプリ内更新（tauri updater）の鍵
+
+鍵は生成済みで、秘密鍵はリポジトリ secret `TAURI_SIGNING_PRIVATE_KEY` に登録済みです。パスワードは無し（workflow は `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を空で渡す）。公開鍵は `src-tauri/tauri.updater.conf.json` の `plugins.updater.pubkey` に commit 済みです。
+
+workflow は **secret が空でなく、かつ pubkey が空でない時だけ** `--config src-tauri/tauri.updater.conf.json` を重ねて updater 用の成果物（`.app.tar.gz` / `.sig` / `latest.json`）を作ります。どちらかが空なら従来どおり dmg だけです。有効時は tauri-action が同名の `.app.tar.gz` を `.sig` 付きで上げるため、鍵なし時だけ使う「Attach .app.tar.gz」step はスキップされます。
+
+build job は `strategy.max-parallel: 1` で aarch64 → x64 の順に直列で走ります。`latest.json` は各 job が既存を download → merge → upload するため、並列だと片方の platform が消える競合があり得るからです（所要時間は増える）。
+
+鍵を作り直す場合は `npx tauri signer generate -w ~/.tauri/phrapedia-updater.key` で作り、公開鍵を pubkey に commit し、秘密鍵を secret に登録し直します（秘密鍵は commit しない）。作り直すと、既に配布済みのアプリは新しい署名の更新を検証できなくなります。
+
+### cask を手動で更新する場合
+
+```bash
+node packaging/homebrew/update-cask.mjs --version 0.1.0 \
+  --arm-dmg Phrapedia_0.1.0_aarch64.dmg --intel-dmg Phrapedia_0.1.0_x64.dmg
+# sha256 を直接渡す場合は --arm-sha / --intel-sha。別ファイルは --cask <path>
+```
 
 ## tap リポジトリの作り方
 
@@ -351,7 +377,7 @@ npm run tauri:build # デスクトップアプリをビルド（src-tauri/target
 
 ## 署名・notarization の設定
 
-Apple Developer Program のアカウントがあれば、リポジトリ secret を登録するだけで release ワークフローが署名と notarization を行います。**未設定の場合はスキップ**され、署名なし（ad-hoc）のビルドになります。
+**Apple の署名・notarization は任意**です。既定は ad-hoc 署名（`src-tauri/tauri.conf.json` の `bundle.macOS.signingIdentity = "-"`）で、Apple Developer Program のアカウントは不要です。Apple Developer のアカウントがあれば、リポジトリ secret を登録するだけで release ワークフローが署名と notarization を行います。**未設定の場合はスキップ**され、ad-hoc 署名のビルドになります。
 
 | Secret | 内容 |
 |---|---|
