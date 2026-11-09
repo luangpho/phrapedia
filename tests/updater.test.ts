@@ -225,6 +225,7 @@ describe('useUpdater', () => {
     expect(isPermissionError('Permission denied (os error 13)')).toBe(true)
     expect(isPermissionError('Operation not permitted (os error 1)')).toBe(true)
     expect(isPermissionError('Read-only file system')).toBe(true)
+    expect(isPermissionError('Failed to move the new app into place')).toBe(true)
     expect(isPermissionError('signature mismatch')).toBe(false)
     expect(isPermissionError('network down')).toBe(false)
   })

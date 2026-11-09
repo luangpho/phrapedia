@@ -28,8 +28,8 @@ export type Notify = (toast: UpdaterToast) => void
 export const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 export const BREW_UPGRADE_COMMAND = 'brew upgrade --cask phrapedia'
 
-/** EACCES / EPERM / read-only volume: /Applications/Phrapedia.app is owned by another user (Homebrew installed by someone else). */
-const PERMISSION_RE = /permission denied|os error 13|os error 1\b|operation not permitted|not permitted|read-only|EACCES|EPERM/i
+/** EACCES / EPERM / read-only volume, or the plugin's own "Failed to move the new app into place" (macOS: the privileged retry was refused): /Applications/Phrapedia.app is owned by another user (Homebrew installed by someone else). */
+const PERMISSION_RE = /permission denied|failed to move the new app into place|os error 13|os error 1\b|operation not permitted|not permitted|read-only|EACCES|EPERM/i
 
 export function isPermissionError(message: string): boolean {
   return PERMISSION_RE.test(message)
