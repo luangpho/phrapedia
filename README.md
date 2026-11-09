@@ -344,17 +344,17 @@ scripts/release.sh --dry-run 0.1.1  # push・tag 以外を全部行う（確認�
 ### 更新方法
 
 - 利用者: `brew upgrade --cask phrapedia`。
-- アプリ内更新: 起動時に 1 回だけ更新を確認し、あれば確認ダイアログを出して、更新・再起動する。updater の鍵を登録するまでは無効（確認は黙って無視される）。
+- アプリ内更新: 起動時に 1 回だけ更新を確認し、あれば確認ダイアログを出して、更新・再起動する。更新の確認・配布には署名鍵が使われる（下記）。確認に失敗した場合（オフライン等）は黙って無視される。
 
-### アプリ内更新（tauri updater）の鍵の登録
+### アプリ内更新（tauri updater）の鍵
 
-署名なし（鍵未登録）のままでも release は成功し、dmg だけが上がります。有効にするには鍵を作って 2 か所に登録します。
+鍵は生成済みで、秘密鍵はリポジトリ secret `TAURI_SIGNING_PRIVATE_KEY` に登録済みです。パスワードは無し（workflow は `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を空で渡す）。公開鍵は `src-tauri/tauri.updater.conf.json` の `plugins.updater.pubkey` に commit 済みです。
 
-1. `npx tauri signer generate -w ~/.tauri/phrapedia-updater.key` で鍵を作る（秘密鍵は commit しない）。
-2. 公開鍵を `src-tauri/tauri.updater.conf.json` の `plugins.updater.pubkey` に入れて commit する。
-3. 秘密鍵（と、パスワードを付けたなら）をリポジトリ secret `TAURI_SIGNING_PRIVATE_KEY`（`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）に登録する。
+workflow は **secret が空でなく、かつ pubkey が空でない時だけ** `--config src-tauri/tauri.updater.conf.json` を重ねて updater 用の成果物（`.app.tar.gz` / `.sig` / `latest.json`）を作ります。どちらかが空なら従来どおり dmg だけです。有効時は tauri-action が同名の `.app.tar.gz` を `.sig` 付きで上げるため、鍵なし時だけ使う「Attach .app.tar.gz」step はスキップされます。
 
-workflow は **secret が空でなく、かつ pubkey が空でない時だけ** `--config src-tauri/tauri.updater.conf.json` を重ねて updater 用の成果物を作ります。どちらかが空なら従来どおり dmg だけです。有効時は tauri-action が同名の `.app.tar.gz` を `.sig` 付きで上げるため、鍵なし時だけ使う「Attach .app.tar.gz」step はスキップされます。
+build job は `strategy.max-parallel: 1` で aarch64 → x64 の順に直列で走ります。`latest.json` は各 job が既存を download → merge → upload するため、並列だと片方の platform が消える競合があり得るからです（所要時間は増える）。
+
+鍵を作り直す場合は `npx tauri signer generate -w ~/.tauri/phrapedia-updater.key` で作り、公開鍵を pubkey に commit し、秘密鍵を secret に登録し直します（秘密鍵は commit しない）。作り直すと、既に配布済みのアプリは新しい署名の更新を検証できなくなります。
 
 ### cask を手動で更新する場合
 

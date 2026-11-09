@@ -26,9 +26,8 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 
 ## 残課題
 
-- updater の鍵: `tauri signer generate` で作り、公開鍵を `tauri.updater.conf.json` の pubkey へ、秘密鍵を secret `TAURI_SIGNING_PRIVATE_KEY` へ（master-cap 側）。
-- `latest.json` は matrix 2 本が各自「既存を download → platforms を merge → upload」するため、同時に終わると片方の platform が消える競合の可能性がある（tauri-action のソース上の挙動）。対策案は build job に `strategy.max-parallel: 1`（所要時間は増える）。未適用。
-- 実際の GitHub Actions 上で、matrix 2 本の `latest.json` に `darwin-aarch64` / `darwin-x86_64` が両方載ることは、鍵登録後の最初の release で要確認（tauri-action の仕様に基づく想定で、CI 上では未検証）。
+- `latest.json` の並列 merge 競合は build job に `strategy.max-parallel: 1` を入れて回避（aarch64 → x64 の直列、所要時間は増える）。
+- 実際の GitHub Actions 上で、matrix 2 本の `latest.json` に `darwin-aarch64` / `darwin-x86_64` が両方載ることは、次の release で要確認（tauri-action の仕様に基づく想定で、CI 上では未検証）。
 - macOS 実機での release.sh 実行（bash 3.2）とアプリ内更新の動作は未検証（Linux のみ確認）。
 - `npm run typecheck` の vue-router volar 警告は別件。
 
@@ -39,3 +38,10 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 - `src-tauri/tauri.updater.conf.json` の pubkey に公開鍵を設定。release.yml は `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を空文字で明示（secret は参照しない）。
 - README「Homebrew でインストール」: 右クリックで開く・xattr 手打ちの案内なし。cask が隔離属性を外す旨に変更。
 - 確認: `npm test` 63 passed、typecheck 終了コード 0、js-yaml parse と run 部抽出で updater 有効（`--config` と env）/ 無効の両分岐を確認。ruby は無く `ruby -c` は省略。
+
+
+## 追加作業（latest.json 競合対策・README の鍵節）
+
+- release.yml の build job に `strategy.max-parallel: 1` を追加。
+- README「アプリ内更新（tauri updater）の鍵」を実態に合わせて書き直し（鍵は生成・secret 登録済み、pubkey は commit 済み、password 無し、「鍵登録までは無効」の文を削除）。
+- 確認: js-yaml parse と run 部抽出で updater 有効・無効（secret 空 / pubkey 空）の両分岐を再確認。
