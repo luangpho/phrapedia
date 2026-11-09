@@ -21,8 +21,8 @@ g.createError = (opts: { statusCode?: number; statusMessage?: string; message?: 
   new TestH3Error(typeof opts === 'string' ? { message: opts } : opts)
 
 g.useRuntimeConfig = () => ({
-  anthropicApiKey: '',
-  anthropicModel: 'test-model',
+  aiModel: 'test-model',
+  claudeCommand: 'claude',
   dataDir: 'data',
   sourcesDir: 'sources',
   stateDir: '.phrapedia',

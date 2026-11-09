@@ -12,6 +12,7 @@ interface SessionRow {
   kind: EntityKind
   slug: string | null
   title: string
+  claude_session_id: string | null
   created_at: string | Date
   updated_at: string | Date
 }
@@ -29,7 +30,7 @@ function iso(v: string | Date): string {
 }
 
 function toSession(r: SessionRow): ChatSession {
-  return { id: r.id, kind: r.kind, slug: r.slug ?? null, title: r.title, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at) }
+  return { id: r.id, kind: r.kind, slug: r.slug ?? null, title: r.title, claudeSessionId: r.claude_session_id ?? null, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at) }
 }
 
 function toMessage(r: MessageRow): ChatMessage {
@@ -45,7 +46,7 @@ export async function createChatSession(kind: EntityKind, slug: string | null, t
   const db = await useDb()
   const res = await db.query<SessionRow>(
     `INSERT INTO chat_sessions (id, kind, slug, title) VALUES ($1, $2, $3, $4)
-     RETURNING id, kind, slug, title, created_at, updated_at`,
+     RETURNING id, kind, slug, title, claude_session_id, created_at, updated_at`,
     [newChatId(), kind, slug, title.slice(0, 200)],
   )
   return toSession(res.rows[0]!)
@@ -54,7 +55,7 @@ export async function createChatSession(kind: EntityKind, slug: string | null, t
 export async function getChatSession(id: string): Promise<ChatSession | null> {
   const db = await useDb()
   const res = await db.query<SessionRow>(
-    'SELECT id, kind, slug, title, created_at, updated_at FROM chat_sessions WHERE id = $1', [id],
+    'SELECT id, kind, slug, title, claude_session_id, created_at, updated_at FROM chat_sessions WHERE id = $1', [id],
   )
   return res.rows[0] ? toSession(res.rows[0]) : null
 }
@@ -64,10 +65,10 @@ export async function listChatSessions(kind: EntityKind, slug: string | null): P
   const db = await useDb()
   const res = slug === null
     ? await db.query<SessionRow>(
-        `SELECT id, kind, slug, title, created_at, updated_at FROM chat_sessions
+        `SELECT id, kind, slug, title, claude_session_id, created_at, updated_at FROM chat_sessions
          WHERE kind = $1 AND slug IS NULL ORDER BY updated_at DESC LIMIT 100`, [kind])
     : await db.query<SessionRow>(
-        `SELECT id, kind, slug, title, created_at, updated_at FROM chat_sessions
+        `SELECT id, kind, slug, title, claude_session_id, created_at, updated_at FROM chat_sessions
          WHERE kind = $1 AND slug = $2 ORDER BY updated_at DESC LIMIT 100`, [kind, slug])
   return res.rows.map(toSession)
 }
@@ -120,4 +121,10 @@ export async function touchChatSession(id: string, patch: { slug?: string | null
     sets.push(`title = $${params.length}`)
   }
   await db.query(`UPDATE chat_sessions SET ${sets.join(', ')} WHERE id = $1`, params)
+}
+
+/** Remember (or clear, with null) the Claude Code CLI session that holds this conversation's context. */
+export async function setClaudeSessionId(id: string, claudeSessionId: string | null): Promise<void> {
+  const db = await useDb()
+  await db.query('UPDATE chat_sessions SET claude_session_id = $2 WHERE id = $1', [id, claudeSessionId])
 }

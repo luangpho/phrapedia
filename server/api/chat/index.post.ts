@@ -1,5 +1,5 @@
 import type { ChatRequest, ChatStreamEvent } from '../../../shared/types/chat'
-import { prepareChatTurn, runChatTurn } from '../../utils/agent'
+import { mcpAuthHeaders, prepareChatTurn, runChatTurn } from '../../utils/agent'
 
 /**
  * POST /api/chat — one chat turn streamed as Server-Sent Events (`data: <ChatStreamEvent JSON>`).
@@ -40,6 +40,12 @@ export default defineEventHandler(async (event) => {
     controller.abort()
   })
 
+  // The CLI calls back into this very server: use the socket's own port (Tauri picks a free one; behind a proxy the
+  // public Host header would not be reachable from here).
+  const localPort = event.node.req.socket.localPort
+  const mcpUrl = localPort ? `http://127.0.0.1:${localPort}/mcp` : new URL('/mcp', getRequestURL(event)).toString()
+  const mcp = { url: mcpUrl, headers: mcpAuthHeaders(useRuntimeConfig(event)) }
+
   const send = (ev: ChatStreamEvent) => {
     if (closed) return
     void stream.push(JSON.stringify(ev)).catch(() => {})
@@ -49,7 +55,7 @@ export default defineEventHandler(async (event) => {
     try {
       const prepared = await prepareChatTurn(request)
       send({ type: 'session', sessionId: prepared.session.id, userMessageId: prepared.userMessage.id, assistantMessageId: prepared.assistantId })
-      const result = await runChatTurn(request, send, controller.signal, prepared)
+      const result = await runChatTurn(request, send, controller.signal, prepared, mcp)
       // On provider errors the {type:'error'} event was already sent; still deliver the stored message.
       send({ type: 'done', message: result.assistantMessage })
     } catch (err) {

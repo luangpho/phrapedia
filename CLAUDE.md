@@ -3,7 +3,7 @@
 タイの高僧・寺院（将来: プラクルアン）の知識ベース。Markdown ファイルが正本。詳細な契約は `docs/ARCHITECTURE.md`。
 
 ## スタック
-Nuxt 4 (SSR, TS strict) / Nuxt UI v4 / Tailwind v4 / `@nuxtjs/mcp-toolkit`（`/mcp`）/ PGlite（`.phrapedia/`）/ Anthropic SDK（チャット）/ Antigravity CLI `agy`（Web 調査。旧 Gemini CLI も選択可）/ simple-git。
+Nuxt 4 (SSR, TS strict) / Nuxt UI v4 / Tailwind v4 / `@nuxtjs/mcp-toolkit`（`/mcp`）/ PGlite（`.phrapedia/`）/ Claude Code CLI `claude -p`（チャット）/ Antigravity CLI `agy`（Web 調査。旧 Gemini CLI も選択可）/ simple-git。
 
 ## コマンド
 ```bash
@@ -41,7 +41,8 @@ npm run tauri:build # デスクトップアプリのビルド（src-tauri/tauri.
 - **レコードは Markdown**。DB に正本を置かない（PGlite は設定・履歴・インデックス・キャッシュのみ）。書き込みは `writeEntity()` 経由で frontmatter を正規化。
 - **一次資料は読み取り専用**。アプリ・ツールから `sources/` に書き込まない。パスは `safeJoin()` で検証。
 - 一次資料 > Web 調査。Web 由来は「未確認」と明記し、`## 出典` で一次資料と Web を分ける。
-- **チャット AI は Claude 固定**。Gemini（Antigravity CLI）は `web_research` ツールのインターネット検索にのみ使う。チャットの代替プロバイダは追加しない。
+- **チャット AI は Claude 固定**。実行経路は Claude Code CLI の headless 実行（`claude -p`、ユーザの `claude` ログインで動く。API キーはアプリで扱わない）。Gemini（Antigravity CLI）は `web_research` ツールのインターネット検索にのみ使う。チャットの代替プロバイダは追加しない。
+- チャットの `claude -p` には自身の `/mcp` だけを `--mcp-config` で渡し、組み込みツールは無効（`--tools ""`）、`sync_data` は許可しない。下書き更新は MCP ツール `update_draft`（アプリ内チャット専用）の `tool_use` を見て `draft` イベントにする。
 - **UI は日本語**。Nuxt UI のトークン（`text-muted`, `bg-elevated` 等）を使いダークモードを壊さない。アイコンボタンには `aria-label`。
 - サーバ側は Nitro の自動インポート（`createError`, `useDb`, `getSettings` 等）を使う。新しいグローバルをテストで使う場合は `tests/setup.ts` にスタブを追加。
 - Git 同期でステージするのはデータフォルダのみ。

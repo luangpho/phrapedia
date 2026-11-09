@@ -28,6 +28,8 @@ export interface ChatSession {
   /** null while the record has not been saved yet (draft) */
   slug: string | null
   title: string
+  /** Claude Code CLI session id used for --resume (null until the first turn ran, or after history edits) */
+  claudeSessionId?: string | null
   createdAt: string
   updatedAt: string
 }

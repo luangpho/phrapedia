@@ -36,7 +36,7 @@ const { messages, uiMessages, status, error, loading, send, stop, retry, reset }
 
 const { data: settings } = useSettings()
 const providerLabel = computed(() => (settings.value ? 'Claude' : null))
-const missingKey = computed(() => settings.value?.capabilities?.anthropicConfigured === false)
+const missingCli = computed(() => settings.value?.capabilities?.claudeFound === false)
 
 const byId = computed(() => {
   const map = new Map<string, ChatMessage>()
@@ -148,13 +148,13 @@ function onNewConversation() {
 
     <div class="min-h-0 flex-1 overflow-y-auto" data-chat-panel-scroll>
       <UAlert
-        v-if="missingKey"
+        v-if="missingCli"
         class="m-3 w-auto"
         color="warning"
         variant="subtle"
-        icon="i-lucide-key-round"
-        title="Anthropic API キーが未設定です"
-        description=".env の NUXT_ANTHROPIC_API_KEY を設定してサーバを再起動してください。Gemini はインターネット検索にのみ使われ、チャットの代わりにはなりません。"
+        icon="i-lucide-terminal"
+        title="Claude Code CLI（claude）が見つかりません"
+        description="Claude Code を導入し、ターミナルで claude を実行してログインしてください。見つからない場合は 設定 でコマンドのパスを指定できます。Gemini はインターネット検索にのみ使われ、チャットの代わりにはなりません。"
       />
 
       <!-- loading -->
