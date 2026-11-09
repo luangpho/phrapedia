@@ -40,3 +40,13 @@ branch: `feat/update-icon`。起動時に `ask` を自動表示していた更�
 
 - `docs/reports/dist-like-bantou.md` の旧挙動の記述（起動時 1 回 check → 確認）は当時の記録としてそのまま残した。現行の挙動は README「更新方法」と CLAUDE.md「配布」を参照。
 - bantou は確認ダイアログ無しで即 `downloadAndInstall` するが、要件に従い phrapedia は確認ダイアログを挟む。
+
+## レビュー（review worker）
+
+- 指摘 1（修正済み・重大）: `app/layouts/default.vue` が `<UpdateButton>` と書いていたが、Nuxt の自動 import 名は `components/desktop/UpdateButton.vue` → `DesktopUpdateButton`（`.nuxt/components.d.ts` で確認。既存の `DesktopPathsCard` と同じ規則）。そのままでは解決されず、更新アイコンが一切描画されなかった。`<DesktopUpdateButton>` に直した。単体テストは composable のみで `.vue` を見ないため検出できなかった。
+- 指摘 2（修正済み・軽微）: HMR で `useUpdater.ts` が再評価されると旧 `setInterval` が残る。`import.meta.hot.dispose` で clear するようにした（本番は影響なし）。
+- 確認のみ（修正なし）: 権限エラー正規表現は実害のある過剰一致なし（`not permitted` は `operation not permitted` と重複するが無害）。`updater_enabled` は build.rs が app manifest を持たないため追加 permission 不要。version は 0.1.2 のまま。commit 末尾の 2 行は全 commit で確認。
+- bantou との差: bantou は確認なしで即 install。phrapedia は要件どおり `confirmDialog` を挟む。差は妥当。
+- 気づき（本 PR の範囲外）: `sidecar::tests::free_port_is_usable` は既存の flaky（update-icon の報告どおり）。レビュー側の再実行では 15 passed で再現せず。
+- 軽微な既知事項（未修正）: 静かな再 check 中は `available` が一瞬 `checking` になり、バッジが点滅しうる。
+- レビュー側テスト: `npm test` 86 passed / typecheck exit 0 / cargo check・clippy -D warnings 通過 / cargo test 15 passed / `tauri:build` 成功 / xvfb 20 秒起動で panic なし（timeout 124）、残プロセスなし。

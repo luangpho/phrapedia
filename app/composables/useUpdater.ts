@@ -178,6 +178,14 @@ async function init(): Promise<void> {
   timer = setInterval(() => void silentCheck(), CHECK_INTERVAL_MS)
 }
 
+// HMR re-evaluates this module (resetting `timer` / `started`); stop the old interval so it does not leak.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (timer) clearInterval(timer)
+    timer = null
+  })
+}
+
 export function useUpdater() {
   return { state, enabled, currentVersion, init, handleClick, silentCheck }
 }

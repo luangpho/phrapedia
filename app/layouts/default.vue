@@ -38,7 +38,7 @@ const addLabel = computed(() => `${kindLabel(kind.value as EntityKind)}を追加
         </NuxtLink>
         <div class="flex items-center gap-1" :class="collapsed ? 'mx-auto' : 'ms-auto'">
           <!-- collapsed: the header only fits one icon, so the update icon moves to the footer -->
-          <UpdateButton v-if="!collapsed" />
+          <DesktopUpdateButton v-if="!collapsed" />
           <UDashboardSidebarCollapse aria-label="サイドバーの折りたたみ" />
         </div>
       </template>
@@ -77,7 +77,7 @@ const addLabel = computed(() => `${kindLabel(kind.value as EntityKind)}を追加
       </template>
 
       <template #footer="{ collapsed }">
-        <UpdateButton v-if="collapsed" class="justify-center" />
+        <DesktopUpdateButton v-if="collapsed" class="justify-center" />
         <SyncStatusButton :collapsed="collapsed" />
         <UButton
           to="/sources"
