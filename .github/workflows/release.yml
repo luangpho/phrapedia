@@ -71,6 +71,34 @@ jobs:
             echo "署名 secrets 未設定のため未署名でビルド"
           fi
 
+      # アプリ内更新（tauri updater）の署名鍵。secret TAURI_SIGNING_PRIVATE_KEY が空でなく、かつ
+      # src-tauri/tauri.updater.conf.json の pubkey が空でない時だけ有効にする。有効時は
+      # UPDATER_ARGS で設定ファイルを重ね、tauri-action が .app.tar.gz / .sig / latest.json を release に上げる。
+      # どちらかが空なら従来どおり dmg だけのビルド（鍵が後入れでも release は成功し続ける）。
+      - name: Export updater signing env
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          pubkey="$(node -p "require('./src-tauri/tauri.updater.conf.json').plugins.updater.pubkey || ''")"
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -z "${pubkey}" ]; then
+            echo "updater 鍵 (secret) または pubkey が未設定のため、アプリ内更新の成果物なしでビルド"
+            exit 0
+          fi
+          delim="EOF_UPDATER_${RANDOM}${RANDOM}"
+          {
+            echo "UPDATER_ENABLED=true"
+            echo "UPDATER_ARGS=--config src-tauri/tauri.updater.conf.json"
+            printf 'TAURI_SIGNING_PRIVATE_KEY<<%s\n' "${delim}"
+            printf '%s\n' "${TAURI_SIGNING_PRIVATE_KEY}"
+            printf '%s\n' "${delim}"
+            printf 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD<<%s\n' "${delim}"
+            printf '%s\n' "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+            printf '%s\n' "${delim}"
+          } >> "${GITHUB_ENV}"
+          echo "updater 署名を有効化してビルド"
+
       - name: Build and publish (tauri-action)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -81,9 +109,12 @@ jobs:
           releaseBody: See the assets to download and install this version.
           releaseDraft: false
           prerelease: false
-          args: --target ${{ matrix.target }} --config src-tauri/tauri.bundle.conf.json
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.bundle.conf.json ${{ env.UPDATER_ARGS }}
 
+      # updater 有効時は tauri-action が同名 (Phrapedia_<ver>_<arch>.app.tar.gz) を署名 (.sig) 付きで上げる。
+      # ここで tar し直して --clobber すると .sig と中身が食い違い、アプリ内更新が署名検証で失敗するためスキップする。
       - name: Attach .app.tar.gz
+        if: env.UPDATER_ENABLED != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET: ${{ matrix.target }}
