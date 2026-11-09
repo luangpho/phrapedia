@@ -14,6 +14,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       fail-fast: false
+      # latest.json は job ごとに既存を download → merge → upload するため、並列だと platform が消える競合がある。直列にする
+      max-parallel: 1
       matrix:
         include:
           - arch: aarch64
