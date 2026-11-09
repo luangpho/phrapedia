@@ -17,7 +17,7 @@
 | cwd | `os.tmpdir()/phrapedia-claude-work`（空の専用 dir。データセットに書き込ませない・親ディレクトリの CLAUDE.md を拾わない） |
 | 設定 | `ai { model, maxTokens, extraInstructions, command, args, timeoutMs }`。`capabilities.claudeFound / claudeVersion`（`claude --version`、60 秒キャッシュ）。旧 `ai.anthropicModel` は読み込み時に `ai.model` へ移行 |
 | env | `NUXT_AI_MODEL`（旧 `NUXT_ANTHROPIC_MODEL`）, `NUXT_CLAUDE_COMMAND`。`NUXT_ANTHROPIC_API_KEY` は廃止 |
-| Tauri | sidecar に渡す PATH に `/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin` を（未包含のものだけ）追加（`sidecar_path()`）。それまでは PATH を一切設定していなかった（node 探索用の `find_node` が PATH 外を探すだけ）。cask は変更なし |
+| Tauri | sidecar に渡す PATH に `/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin` を（未包含のものだけ）追加（`sidecar_path()`）。それまでは親プロセスの PATH をそのまま継承していた（GUI 起動は最小 PATH。`find_node` が PATH 外も探すだけで sidecar には渡していなかった）。cask は変更なし |
 
 ## 確認したフラグ（Claude Code 2.1.317、`claude --help` で実在を確認）
 `-p` / `--output-format stream-json` / `--verbose` / `--include-partial-messages` / `--model` / `--system-prompt` / `--system-prompt-snapshot off` / `--mcp-config` / `--strict-mcp-config` / `--tools ""` / `--allowedTools` / `--disallowedTools` / `--permission-mode dontAsk` / `--permission-prompts none` / `--setting-sources ""` / `--disable-slash-commands` / `--session-id` / `--resume`（`--version`）。
