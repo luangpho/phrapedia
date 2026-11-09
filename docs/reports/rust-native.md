@@ -98,9 +98,16 @@ branch: `feat/rust-native`。実行時の Node / Nitro / PGlite を無くし、W
 - 追加: `tests/api.test.ts`（全 command の名前と引数、AppError 変換、ブラウザ単体の reject、`chat_send` の Channel 中継 / detach / 入力不正、`read_source_bytes` の Blob 化とキャッシュ）、`tests/chat-events.test.ts`（`applyChatStreamEvent`、一次資料マーカー href）。維持: updater / dialog / slug / update-cask（`isTauriRuntime` の参照元だけ `app/utils/api` に変更）。
 - `cd src-tauri && cargo check && cargo clippy --all-targets -- -D warnings && cargo test`（90 件）: 通過。
 
+### chat 合流後の確認（4f53963 を merge）
+
+- `chat_send`（`request`+`onEvent`）/ `chat_abort`（`turnId`）の引数名・`ChatRequest`・`ChatStreamEvent`（kebab-case / camelCase）は api.ts と一致。api.ts が呼ぶ全 command が `generate_handler` に登録済み。契約のずれ無し。
+- `npm ci && npm test`（83 件）`&& npm run typecheck && npx nuxt generate`、`cargo check`・`clippy --all-targets -D warnings`・`cargo test`（132 件）: 通過。
+- `npm run tauri:build`（Linux）: deb / rpm / AppImage の 3 つが成功。deb の内容に `.output/server`・`node_modules`・`.mjs` は無い（`usr/bin/phrapedia` + desktop + icon のみ）。
+- xvfb 上で release バイナリを PATH から node / npx を外した環境（PATH=空 dir）で 30 秒起動 → クラッシュ無し（timeout で打ち切り、残存プロセス無し。EGL/DRI の警告のみ）。
+
 ### 未検証 / 注意
 
 - 実機 GUI での操作（画像・PDF の表示、`window.open` による Blob URL の「元ファイル」「PDF を開く」「ダウンロード」リンク、WebView 上のアイコン表示、チャットのストリーム表示 / 停止）。いずれも未実施。
-- `chat_send` / `chat_abort` は chat worker の実装待ち（frontend は契約どおり呼ぶのみ）。
+- MCP サブコマンド合流後の `tauri:build` 再確認は未実施（integrate-test）。
 - `data/amulets/README.md` と `sources/README.md` に旧 API / PGlite の記述が残る（利用者データ側の文書のため未変更）。README / CLAUDE.md / ARCHITECTURE の更新（「デスクトップ専用化、web 版は旧 branch のまま」）は integrate-test。
 - `nuxt typecheck` が `vue-router/volar/sfc-route-blocks` の解決警告を出す（型エラーではない。本変更前から出るかは未確認）。
