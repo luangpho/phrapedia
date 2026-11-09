@@ -24,3 +24,10 @@ branch: `fix/confirm-dialog`。Tauri（wry）の macOS WKWebView は JS の conf
 
 - macOS 実機での ask ダイアログ表示（Linux では確認不可）。
 - ブラウザ版の窓内遷移ガードは従来どおり window.confirm（仕様）。
+
+## レビュー（dialog-review）
+
+- 確認 OK: window.confirm / alert / prompt の取りこぼしなし（テンプレート内 @click も無し。削除・破棄は UModal 経由）。Tauri 判定は useUpdater と同じ `isTauriRuntime()`。ask 引数は plugin-dialog 2.8.4 の API と一致（ask は message コマンド経由、`dialog:allow-ask` は deprecated alias で `allow-message` と同義、crate の reference.md で確認）。capabilities は最小のまま。
+- 指摘・修正: `ask` が reject（権限不足など）すると cancelEdit / ルートガードで未処理例外になるため、`confirmDialog` で catch して false（編集を破棄しない）を返すよう修正。テスト追加。
+- 未対応の軽微事項: 確認中に取消ボタンを連打するとダイアログが重なり得る（状態破壊はなし）。
+- 環境メモ: `cargo test` が 1 回だけ 1 件失敗し再実行で 15 件通過（flaky の可能性、未調査）。

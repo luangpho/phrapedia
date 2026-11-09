@@ -28,6 +28,15 @@ describe('confirmDialog', () => {
     await expect(confirmDialog('x')).resolves.toBe(false)
   })
 
+  it('Tauri: ask が reject したら false（編集を破棄しない）', async () => {
+    isTauriRuntime.mockReturnValue(true)
+    ask.mockRejectedValue(new Error('denied'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(confirmDialog('x')).resolves.toBe(false)
+    expect(confirm).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('ブラウザ: window.confirm を呼ぶ', async () => {
     isTauriRuntime.mockReturnValue(false)
     confirm.mockReturnValue(true)
