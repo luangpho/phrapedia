@@ -46,3 +46,10 @@
 - ユーザ個人の `~/.claude/CLAUDE.md` は `--setting-sources ""` でも読まれるかを断定していない（出力スタイル hook は除去を確認）。
 - `server/utils/mcp-bridge.ts` の `createMcpBridge()`（インプロセス MCP）はチャットからは使わなくなった（未使用。`listMcpToolNames()` だけ使用）。削除はしていない。
 - 長い下書き（最大 60,000 文字）は `--system-prompt` の argv に載る。Linux の単一引数上限（約 128 KB）以内。
+
+## レビュー（chat-cli-review）
+- 確認: `npm ci` / `npm test`（118 passed）/ `npm run typecheck`（exit 0）/ `npm run build` / `npm run smoke`（8/8）/ `cargo check` / `clippy -D warnings` / `cargo test`（16 passed）。実 smoke（claude 2.1.317、Basic 認証あり）で session → tool-start/result → text-delta → done を確認。
+- 指摘 1（修正済み）: Basic 認証有効時、`Authorization` が `--mcp-config` の argv に載り `ps` で見えた。認証ヘッダがある時は `0600` の一時ファイル（専用 dir）に書き、`--mcp-config <path>` で渡し、実行後に削除する（`writeMcpConfigFile`）。テスト追加。ヘッダ無しは従来どおり inline JSON。
+- 指摘 2（修正済み）: README の Render 節に、Render には `claude` が無くチャットは日本語エラーになる旨と `NUXT_ANTHROPIC_API_KEY` が無効な旨を追記。`render.yaml` は未変更（残存は無害）。
+- 未対応（判断待ち・低）: 子プロセスはプロセスグループ化していない（`--tools ""` で孫プロセスを作らない前提。SIGTERM/SIGKILL は `claude` 本体のみ）。`--system-prompt`（下書き全文）は argv に載る（秘密ではないが `ps` で見える）。
+- 未検証: 古い CLI での `--system-prompt-snapshot`、macOS/Tauri 実機、Windows。

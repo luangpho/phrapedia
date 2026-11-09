@@ -252,6 +252,7 @@ git checkout render && git merge <作業ブランチ> && git push origin render
 | Antigravity CLI | ビルド時に公式スクリプトで導入し `bin/agy` に配置。`GEMINI_API_KEY` で認証（起動スクリプトが `modelProvider: "gemini"` を settings.json に書き込む） |
 | 認証 | `NUXT_BASIC_AUTH_USER` と `NUXT_BASIC_AUTH_PASSWORD` を両方設定すると全ページ・API・`/mcp` に Basic 認証がかかる（`/api/health` は除外）。MCP クライアントからは `Authorization: Basic ...` ヘッダで接続 |
 | プラン | 永続ディスクは有料インスタンス（starter 以上）が必要。無料で試す場合は `render.yaml` の `disk:` と `/var/data` 系の環境変数を外す（その場合データはデプロイごとに失われる） |
+| チャット AI | チャットは `claude`（Claude Code CLI）が必要ですが、Render には導入していません。Render 上でチャットを送ると「Claude Code CLI が見つかりません」という日本語エラーになります（ほかの機能は動作）。`render.yaml` の `NUXT_ANTHROPIC_API_KEY` はアプリが読まないため効果はありません |
 | Git 同期 | Render 上のデータフォルダはリポジトリ外（永続ディスク）なので同期パネルは使えません。一次資料の追加はサーバ上のディスクに直接置くか、ローカルで編集して Render の Shell / SFTP で転送してください。ローカル運用では従来どおり使えます |
 
 ## MCP で使う

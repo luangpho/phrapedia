@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ChatMessage, ChatRequest, ChatSession, ChatStreamEvent } from '../../../shared/types/chat'
-import { buildClaudeArgs, buildClaudeEnv, CHAT_DENIED_TOOLS, probeClaude, runClaudeProcess } from './claude-cli'
+import { buildClaudeArgs, buildClaudeEnv, CHAT_DENIED_TOOLS, probeClaude, runClaudeProcess, writeMcpConfigFile } from './claude-cli'
 import type { ClaudeProcessResult } from './claude-cli'
 import { withHistoryDigest } from './history'
 import { buildSystemPrompt } from './prompt'
@@ -91,6 +91,8 @@ export async function runChatTurn(
   const system = buildSystemPrompt({ kind: request.kind, slug: session.slug, draft: request.draft, settings, toolNames })
   const env = buildClaudeEnv(process.env, { maxTokens: settings.ai.maxTokens })
 
+  // Auth headers must not appear in argv (`ps` shows it): hand them over through a private 0600 file instead.
+  const mcpFile = mcp.headers && Object.keys(mcp.headers).length ? writeMcpConfigFile({ mcpUrl: mcp.url, mcpHeaders: mcp.headers }) : undefined
   const attempt = (ids: { sessionId?: string; resume?: string }, prompt: string) => runClaudeProcess({
     command: settings.ai.command,
     args: buildClaudeArgs({
@@ -98,6 +100,7 @@ export async function runChatTurn(
       systemPrompt: system,
       mcpUrl: mcp.url,
       mcpHeaders: mcp.headers,
+      mcpConfigFile: mcpFile?.path,
       toolNames,
       extraArgs: settings.ai.args,
       ...ids,
@@ -113,15 +116,19 @@ export async function runChatTurn(
   // start over with a new session and hand the stored history over as a digest.
   let claudeSessionId = session.claudeSessionId ?? null
   let run: ClaudeProcessResult
-  if (claudeSessionId) {
-    run = await attempt({ resume: claudeSessionId }, request.message)
-    if (isResumeFailure(run)) {
+  try {
+    if (claudeSessionId) {
+      run = await attempt({ resume: claudeSessionId }, request.message)
+      if (isResumeFailure(run)) {
+        claudeSessionId = randomUUID()
+        run = await attempt({ sessionId: claudeSessionId }, withHistoryDigest(request.message, history))
+      }
+    } else {
       claudeSessionId = randomUUID()
-      run = await attempt({ sessionId: claudeSessionId }, withHistoryDigest(request.message, history))
+      run = await attempt({ sessionId: claudeSessionId }, history.length ? withHistoryDigest(request.message, history) : request.message)
     }
-  } else {
-    claudeSessionId = randomUUID()
-    run = await attempt({ sessionId: claudeSessionId }, history.length ? withHistoryDigest(request.message, history) : request.message)
+  } finally {
+    mcpFile?.cleanup()
   }
 
   const failed = !run.aborted && (Boolean(run.spawnError) || run.timedOut || Boolean(run.resultError) || (!run.finished && run.exitCode !== 0))

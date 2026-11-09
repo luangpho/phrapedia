@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -30,6 +30,8 @@ export interface ClaudeArgsInput {
   mcpUrl: string
   /** Extra HTTP headers for /mcp (e.g. Authorization when Basic auth is enabled) */
   mcpHeaders?: Record<string, string>
+  /** Path of a JSON file holding the --mcp-config (see writeMcpConfigFile). Set when headers carry a secret, so it stays out of argv (visible in `ps`). */
+  mcpConfigFile?: string
   /** Names (without the mcp__phrapedia__ prefix) of the MCP tools the chat may use */
   toolNames: string[]
   /** First turn: new session id (uuid v4) */
@@ -51,10 +53,8 @@ export interface ClaudeArgsInput {
  *  --setting-sources "" + --disable-slash-commands (isolate from the user's settings / hooks / skills),
  *  --session-id / --resume.
  */
-export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
-  const allowed = input.toolNames.filter(n => !CHAT_DENIED_TOOLS.includes(n)).map(n => `${MCP_TOOL_PREFIX}${n}`)
-  const denied = CHAT_DENIED_TOOLS.map(n => `${MCP_TOOL_PREFIX}${n}`)
-  const mcpConfig = {
+export function buildMcpConfig(input: Pick<ClaudeArgsInput, 'mcpUrl' | 'mcpHeaders'>) {
+  return {
     mcpServers: {
       [MCP_SERVER_NAME]: {
         type: 'http',
@@ -63,6 +63,19 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
       },
     },
   }
+}
+
+/** Write the MCP config (with its auth headers) to a 0600 file in a private temp dir; call cleanup() when the CLI is done. */
+export function writeMcpConfigFile(input: Pick<ClaudeArgsInput, 'mcpUrl' | 'mcpHeaders'>): { path: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(claudeWorkDir(), 'mcp-'))
+  const path = join(dir, 'mcp.json')
+  writeFileSync(path, JSON.stringify(buildMcpConfig(input)), { mode: 0o600 })
+  return { path, cleanup: () => rmSync(dir, { recursive: true, force: true }) }
+}
+
+export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
+  const allowed = input.toolNames.filter(n => !CHAT_DENIED_TOOLS.includes(n)).map(n => `${MCP_TOOL_PREFIX}${n}`)
+  const denied = CHAT_DENIED_TOOLS.map(n => `${MCP_TOOL_PREFIX}${n}`)
   const args: string[] = ['-p', ...(input.extraArgs ?? [])]
   args.push(
     '--output-format', 'stream-json',
@@ -71,7 +84,7 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
     '--model', input.model,
     '--system-prompt', input.systemPrompt,
     '--system-prompt-snapshot', 'off',
-    '--mcp-config', JSON.stringify(mcpConfig),
+    '--mcp-config', input.mcpConfigFile ?? JSON.stringify(buildMcpConfig(input)),
     '--strict-mcp-config',
     '--tools', '',
     '--allowedTools', allowed.join(','),

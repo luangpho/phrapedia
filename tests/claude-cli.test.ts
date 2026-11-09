@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const spawnMock = vi.hoisted(() => vi.fn())
 vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 
-import { buildClaudeArgs, buildClaudeEnv, CHAT_DENIED_TOOLS, probeClaude, resolveCommand, runClaudeProcess, withExtraPath } from '../server/utils/agent/claude-cli'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { buildClaudeArgs, buildClaudeEnv, CHAT_DENIED_TOOLS, probeClaude, resolveCommand, runClaudeProcess, withExtraPath, writeMcpConfigFile } from '../server/utils/agent/claude-cli'
 
 const TOOLS = ['search_sources', 'read_source', 'save_entity', 'sync_data', 'sync_status', 'update_draft', 'web_research']
 const base = { model: 'claude-sonnet-5-5', systemPrompt: 'SYS', mcpUrl: 'http://127.0.0.1:4321/mcp', toolNames: TOOLS }
@@ -42,6 +43,21 @@ describe('buildClaudeArgs', () => {
     expect(valueOf(args, '--permission-mode')).toBe('dontAsk')
     expect(valueOf(args, '--permission-prompts')).toBe('none')
     expect(args).not.toContain('--dangerously-skip-permissions')
+  })
+
+  it('keeps the auth header out of argv: config goes through a private 0600 file', () => {
+    const input = { mcpUrl: base.mcpUrl, mcpHeaders: { Authorization: 'Basic c2VjcmV0' } }
+    const file = writeMcpConfigFile(input)
+    try {
+      const args = buildClaudeArgs({ ...base, ...input, sessionId: 'S', mcpConfigFile: file.path })
+      expect(valueOf(args, '--mcp-config')).toBe(file.path)
+      expect(args.join(' ')).not.toContain('c2VjcmV0')
+      expect(statSync(file.path).mode & 0o777).toBe(0o600)
+      expect(JSON.parse(readFileSync(file.path, 'utf8')).mcpServers.phrapedia.headers).toEqual(input.mcpHeaders)
+    } finally {
+      file.cleanup()
+    }
+    expect(existsSync(file.path)).toBe(false)
   })
 
   it('points --mcp-config at the app\'s own /mcp only', () => {
