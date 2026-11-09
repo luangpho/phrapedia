@@ -52,6 +52,7 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 - 指摘: README「更新方法」と「アプリ内更新の鍵の登録」節に、pubkey 未登録・password 前提の古い記述が残っていた。同内容の修正が並行 commit（064dd0e）で先に入っていたため、README はそちらを採用し、現状（鍵は登録済み・パスワード無し・「鍵を作り直す場合」あり・「鍵登録までは無効」の文なし）を確認した。追加の README 変更なし。
 - 報告のみ（未変更）: 「署名・notarization の設定」節末尾に「右クリック → 開く」/ xattr の案内がある。cask 経由でない dmg 直接導入向けなので残した。
 - 上の「残課題」のうち updater 鍵の項は解消済み。`latest.json` に両 platform が載るかは、初回 release 後に要確認のまま（max-parallel: 1 で競合は回避済みの想定）。
+- 追確認（26ca064 / 064dd0e）: build job の `strategy` は fail-fast: false + max-parallel: 1 + matrix.include で構文正しい（js-yaml で確認）。`cask` job は `needs: build` のまま。max-parallel は直列化のみで、updater 無効時の分岐（UPDATER_ARGS 空・Attach step 実行）に影響しない。fail-fast: false なので aarch64 が失敗しても x64 は走るが、cask job は build 失敗でスキップされる。
 - テスト: `npm ci && npm test` 63 passed、`npm run typecheck` 終了コード 0。ruby / actionlint は手元に無く省略。
 
 ## レビュー (review worker)
