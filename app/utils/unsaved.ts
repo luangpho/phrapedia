@@ -11,9 +11,10 @@ export function useUnsavedGuard(dirty: Ref<boolean> | ComputedRef<boolean>, mess
   onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
   onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
-  const guard = () => {
+  // vue-router awaits a Promise<boolean> returned from a guard (false cancels the navigation)
+  const guard = async () => {
     if (!dirty.value) return true
-    return window.confirm(message)
+    return confirmDialog(message)
   }
   onBeforeRouteLeave(guard)
   onBeforeRouteUpdate((to, from) => (to.path === from.path ? true : guard()))

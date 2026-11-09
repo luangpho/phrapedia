@@ -37,8 +37,8 @@ function startEdit() {
   editing.value = true
 }
 
-function cancelEdit() {
-  if (dirty.value && !window.confirm('編集内容を破棄しますか？')) return
+async function cancelEdit() {
+  if (dirty.value && !(await confirmDialog('編集内容を破棄しますか？'))) return
   editorRaw.value = record.value?.raw ?? ''
   editing.value = false
   draftNotice.value = null
