@@ -3,7 +3,18 @@ pub mod core;
 
 use crate::core::{AppDirs, Core};
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{AppHandle, Manager};
+
+/// True when this build carries `plugins.updater` (merged in by tauri.updater.conf.json). The frontend shows the
+/// header update icon only then; the plugin itself is registered under the same condition in `run`.
+fn updater_configured(app: &AppHandle) -> bool {
+    app.config().plugins.0.contains_key("updater")
+}
+
+#[tauri::command]
+fn updater_enabled(app: AppHandle) -> bool {
+    updater_configured(&app)
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -12,8 +23,8 @@ pub fn run() {
         .setup(|app| {
             // The updater plugin fails to initialize without `plugins.updater` (it is only merged in by
             // tauri.updater.conf.json once a key is registered), so register it only when configured.
-            // Without it the frontend's check() rejects and is ignored.
-            if app.config().plugins.0.contains_key("updater") {
+            // Without it `updater_enabled` is false and the frontend hides the update icon.
+            if updater_configured(app.handle()) {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             }
             let dirs = AppDirs { config_dir: app.path().app_config_dir()?, data_dir: app.path().app_data_dir()? };
@@ -48,6 +59,7 @@ pub fn run() {
             commands::delete_chat_session,
             commands::patch_chat_session,
             commands::delete_chat_messages,
+            updater_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

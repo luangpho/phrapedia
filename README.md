@@ -122,7 +122,7 @@ brew install --cask phrapedia
 - cask は `depends_on formula: "node"` を持つので、Homebrew の `node` も一緒に入ります。アプリは `node` を子プロセス（sidecar）として起動します。
 - 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
 - インストール後そのまま起動できます。cask がインストール時に隔離属性（quarantine）を外します（ad-hoc 署名のビルド）。
-- 更新: `brew upgrade --cask phrapedia`、またはアプリ起動時の更新確認。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
+- 更新: `brew upgrade --cask phrapedia`、またはアプリのサイドバー上部の更新アイコン（下記「更新方法」）。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
 - チャットには **Claude Code CLI（`claude`）を別途インストール**してください（cask は `claude` に依存しません）。アプリは sidecar の PATH に `/opt/homebrew/bin`・`/usr/local/bin`・`$HOME/.local/bin` を足して `claude` を探します。それ以外の場所にある場合は 設定 →「AI」でコマンドの絶対パスを指定してください。
 - 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。`GEMINI_API_KEY` などは、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
@@ -355,7 +355,8 @@ scripts/release.sh --dry-run 0.1.1  # push・tag 以外を全部行う（確認�
 ### 更新方法
 
 - 利用者: `brew upgrade --cask phrapedia`。
-- アプリ内更新: 起動時に 1 回だけ更新を確認し、あれば確認ダイアログを出して、更新・再起動する。更新の確認・配布には署名鍵が使われる（下記）。確認に失敗した場合（オフライン等）は黙って無視される。
+- アプリ内更新: サイドバー上部の更新アイコンから行う（アイコンはデスクトップ版で、更新用の署名鍵つきでビルドされた版にだけ出る。ブラウザ / Render には出ない。サイドバーを折りたたむとフッターに移る）。起動時と 6 時間ごとに黙って更新を確認し、あればアイコンにバッジが付き、tooltip に新しい版が出る（自動ダイアログは出ない）。アイコンを押すと、版と release notes を確認ダイアログに出し、了承すると download（進捗 % を表示）→ インストール → 再起動する。更新が無い状態で押すと、その場で確認して「最新です（現在 x.y.z）」と表示する。現在の版は通常時の tooltip に出る。失敗は通知で表示される。更新の確認・配布には署名鍵が使われる（下記）。
+- 権限不足で更新できない場合（Homebrew を別のユーザーで入れ、`/Applications/Phrapedia.app` の所有者が今のユーザーと違う時）は、Homebrew を入れたユーザーで `brew upgrade --cask phrapedia` を実行する。
 
 ### アプリ内更新（tauri updater）の鍵
 

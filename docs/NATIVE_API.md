@@ -60,6 +60,7 @@ TS 側ヘルパ（frontend が用意）: `isAppError(e): e is AppError`、`error
 | command | 引数 | 戻り値 | 置換元 |
 |---|---|---|---|
 | `app_info` | なし | `AppInfo` | `sidecar_info` + `GET /api/health` |
+| `updater_enabled` | なし | `boolean` | 同名（feat/update-icon）。ビルドに `plugins.updater` が入っている時だけ true。false ならヘッダーの更新アイコンを出さない |
 | `get_path_settings` | なし | `PathSettingsView` | 同名（維持） |
 | `save_path_settings` | `{ datasetPath: string, exportPath: string }` | `SavePathsOutcome` | 同名。**サーバ再起動は無い**（保存 = 即反映） |
 
@@ -269,6 +270,7 @@ claude CLI に渡す MCP は **自分自身のバイナリの stdio サブコマ
 | `DELETE /api/chat/sessions/:id/messages` | `delete_chat_messages({ id, ids })` |
 | `POST /api/chat`（SSE） | `chat_send({ request, onEvent: Channel })` + `chat_abort({ turnId })` |
 | `get_path_settings` / `save_path_settings` | 同名（維持。`restartError` 廃止） |
+| `updater_enabled` | 同名（維持。update-icon の command を新構成へ載せ替え済み） |
 | `POST /mcp`（HTTP） | `phrapedia mcp` stdio サブコマンド（§4） |
 
 HTTP 層の `cors` / `csrf` / `auth` middleware は不要（サーバが無い）。CSP の `connect-src` から `http://127.0.0.1:*` を外し、`img-src` は `'self' data: blob:` にできる（tauri.conf.json の CSP は frontend/integrate-test の担当。core は capabilities のみ最小化する）。
