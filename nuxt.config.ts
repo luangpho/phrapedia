@@ -1,14 +1,12 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
-// Desktop (Tauri) frontend build: PHRAPEDIA_TAURI=1 nuxt generate -> SPA (ssr:false) in .output-frontend/public.
-// Everything else (dev / build / start / Render) keeps SSR and the default .output.
-const tauri = process.env.PHRAPEDIA_TAURI === '1'
-
+// Desktop (Tauri) frontend: a static SPA only (no server runtime). `nuxt generate` -> .output-frontend/public
+// (= tauri.conf.json build.frontendDist). All data goes through Tauri commands (app/utils/api.ts).
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/ui', '@nuxtjs/mcp-toolkit'],
+  modules: ['@nuxt/ui'],
   css: ['~/assets/css/main.css'],
-  ssr: !tauri,
+  ssr: false,
 
   app: {
     head: {
@@ -19,51 +17,24 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    // Server-only. Override with NUXT_* environment variables (see .env.example).
-    aiModel: 'claude-sonnet-5-5',
-    claudeCommand: 'claude',
-    dataDir: 'data',
-    sourcesDir: 'sources',
-    stateDir: '.phrapedia',
-    geminiEngine: 'antigravity',
-    geminiCommand: 'agy',
-    // Optional Basic auth for public deployments (NUXT_BASIC_AUTH_USER / NUXT_BASIC_AUTH_PASSWORD)
-    basicAuthUser: '',
-    basicAuthPassword: '',
     public: {
       appName: 'Phrapedia',
     },
   },
 
   icon: {
-    // Bundle the whole lucide collection server-side so dynamically named icons never hit the Iconify API
-    // (the app must work offline / behind restrictive proxies).
-    serverBundle: { collections: ['lucide'] },
+    // No icon server and no network: every icon used by the app is bundled into the client.
+    provider: 'none',
+    serverBundle: false,
+    fallbackToApi: false,
     clientBundle: { scan: true, sizeLimitKb: 512 },
   },
 
-  mcp: {
-    name: 'Phrapedia',
-    version: '0.1.0',
-    description: 'Knowledge base of Thai venerable monks, temples and amulets (Phra Khrueang).',
-    instructions: [
-      'Primary sources (files under the configured sources directory) are authoritative.',
-      'Use search_sources / read_source first; use web_research (Gemini CLI) only for gaps, and mark such facts as unverified.',
-      'Records are markdown files with YAML frontmatter under data/<kind>/<slug>.md; use get_entity / save_entity to read and write them.',
-    ].join(' '),
-    route: '/mcp',
-  },
-
   nitro: {
-    ...(tauri ? { output: { dir: '.output-frontend' } } : {}),
-    experimental: { asyncContext: true },
-    // PGlite ships a WASM bundle; keep it external so Nitro does not try to inline it.
-    externals: { external: ['@electric-sql/pglite'] },
+    output: { dir: '.output-frontend' },
   },
 
-  vite: {
-    optimizeDeps: { exclude: ['@electric-sql/pglite'] },
-  },
+  devServer: { port: 1420 },
 
   typescript: {
     strict: true,
