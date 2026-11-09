@@ -8,20 +8,6 @@ const cards = computed(() => [
   { kind: 'monks' as const, list: monks },
   { kind: 'temples' as const, list: temples },
 ])
-
-const requestUrl = useRequestURL()
-const mcpUrl = computed(() => `${requestUrl.origin}/mcp`)
-const mcpJson = computed(() => JSON.stringify({ mcpServers: { phrapedia: { httpUrl: mcpUrl.value } } }, null, 2))
-
-const toast = useToast()
-async function copyMcp() {
-  try {
-    await navigator.clipboard.writeText(mcpJson.value)
-    toast.add({ title: 'コピーしました', icon: 'i-lucide-clipboard-check', color: 'success' })
-  } catch {
-    toast.add({ title: 'コピーできませんでした', color: 'error', icon: 'i-lucide-circle-alert' })
-  }
-}
 </script>
 
 <template>
@@ -68,17 +54,6 @@ async function copyMcp() {
         </section>
 
         <section class="space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold text-highlighted flex items-center gap-1.5">
-              <UIcon name="i-lucide-plug" class="size-4" />MCP エンドポイント
-            </h3>
-            <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" label="設定をコピー" @click="copyMcp" />
-          </div>
-          <p class="text-sm text-muted leading-6">
-            Claude Code や Antigravity CLI から <code class="font-mono text-xs text-highlighted">{{ mcpUrl }}</code> に接続すると、
-            同じデータを MCP ツール（検索・取得・保存・一次資料・Web 調査・同期）で扱えます。
-          </p>
-          <pre class="rounded-md border border-default bg-elevated/50 p-3 text-xs font-mono overflow-x-auto">{{ mcpJson }}</pre>
           <p class="text-sm text-muted">
             一次資料フォルダや AI プロバイダは <ULink to="/settings" class="text-primary hover:underline">設定</ULink> で変更できます。
             資料の一覧は <ULink to="/sources" class="text-primary hover:underline">一次資料</ULink> から確認できます。

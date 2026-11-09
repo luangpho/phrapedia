@@ -1,10 +1,19 @@
-/** Encode a sources-relative path for /api/sources/file/<path> (segment-wise). */
+/** Marker href of a primary-source file inside rendered markdown; resolved to a Blob URL after rendering. */
+export const SOURCE_HREF_PREFIX = '#phra-src/'
+
+/** Encode a sources-relative path (segment-wise). */
 export function encodeSourcePath(path: string): string {
   return path.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/')
 }
 
-export function sourceFileUrl(path: string, raw = true): string {
-  return apiUrl(`/api/sources/file/${encodeSourcePath(path)}${raw ? '?raw=1' : ''}`)
+/** Sources-relative path from a marker href made by `rewriteSourceHref`; null for any other href. */
+export function sourcePathFromHref(href: string | null | undefined): string | null {
+  if (!href || !href.startsWith(SOURCE_HREF_PREFIX)) return null
+  try {
+    return decodeURIComponent(href.slice(SOURCE_HREF_PREFIX.length))
+  } catch {
+    return null
+  }
 }
 
 export function isExternalUrl(v: string): boolean {
@@ -12,8 +21,8 @@ export function isExternalUrl(v: string): boolean {
 }
 
 /**
- * Rewrite a relative image/link path found in a record body to the sources file endpoint.
- * `sources/x.jpg` -> `/api/sources/file/x.jpg?raw=1`, `images/x.jpg` -> `/api/sources/file/images/x.jpg?raw=1`.
+ * Rewrite a relative image/link path found in a record body to a source-file marker href (see SOURCE_HREF_PREFIX).
+ * `sources/x.jpg` -> `#phra-src/x.jpg`, `images/x.jpg` -> `#phra-src/images/x.jpg`.
  * Absolute (`/...`), external, anchor and data URLs are returned unchanged.
  */
 export function rewriteSourceHref(href: string): string {
@@ -23,7 +32,7 @@ export function rewriteSourceHref(href: string): string {
   try {
     p = decodeURI(p)
   } catch { /* keep as-is */ }
-  return sourceFileUrl(p, true)
+  return SOURCE_HREF_PREFIX + encodeSourcePath(p)
 }
 
 export function formatBytes(n: number): string {

@@ -1,8 +1,7 @@
 /**
- * Desktop (Tauri) only: wait for the Node sidecar, then route every /api and /mcp request to it.
- * The WebView origin (tauri://localhost) differs from the sidecar (http://127.0.0.1:<port>), so relative
- * URLs are rewritten at the fetch level; this covers $fetch, useFetch and the chat SSE stream alike.
- * A failed sidecar never blocks the UI: the error is shown by <DesktopBanner> and the settings page.
+ * Desktop (Tauri) only: read the app state (`app_info`). A failure never blocks the UI: the error is shown by
+ * <DesktopBanner> and the settings page. In a plain browser nothing happens here; the API layer reports
+ * "デスクトップアプリ専用です" per call.
  */
 export default defineNuxtPlugin(async () => {
   if (!isTauriRuntime()) return
@@ -11,17 +10,16 @@ export default defineNuxtPlugin(async () => {
     await reload()
   } catch (err) {
     info.value = {
-      phase: 'error',
-      baseUrl: null,
-      error: `サーバー状態を取得できません: ${err instanceof Error ? err.message : String(err)}`,
+      version: '',
       settingsWarning: null,
+      datasetPath: '',
+      exportPath: '',
       datasetCheck: { ok: true, error: null },
       exportCheck: { ok: true, error: null },
+      stateDir: '',
+      error: `アプリの状態を取得できません: ${errorMessage(err)}`,
     }
   }
-  const nativeFetch = window.fetch.bind(window)
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    nativeFetch(typeof input === 'string' ? apiUrl(input) : input, init)
   // fire and forget: never delays startup. Only decides whether the header update icon shows and runs a silent check
   // (no dialog); updating itself starts from the icon.
   void useUpdater().init()

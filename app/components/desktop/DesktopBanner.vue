@@ -1,12 +1,12 @@
 <script setup lang="ts">
-const { info, isDesktop, restart } = useDesktop()
+const { info, isDesktop, reload } = useDesktop()
 const retrying = ref(false)
 
 const messages = computed(() => {
   const i = info.value
   if (!i) return []
   const out: string[] = []
-  if (i.error) out.push(`サーバーを起動できません: ${i.error}`)
+  if (i.error) out.push(`${i.error}`)
   if (i.settingsWarning) out.push(i.settingsWarning)
   if (!i.datasetCheck.ok && i.datasetCheck.error) out.push(`データセットパス: ${i.datasetCheck.error}`)
   if (!i.exportCheck.ok && i.exportCheck.error) out.push(`書き出し先パス: ${i.exportCheck.error}`)
@@ -16,7 +16,10 @@ const messages = computed(() => {
 async function retry() {
   retrying.value = true
   try {
-    await restart()
+    await reload()
+    await refreshNuxtData()
+  } catch (err) {
+    if (info.value) info.value = { ...info.value, error: `アプリの状態を取得できません: ${errorMessage(err)}` }
   } finally {
     retrying.value = false
   }

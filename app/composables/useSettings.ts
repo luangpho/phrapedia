@@ -12,16 +12,16 @@ export function toAppSettings(v: AppSettings | SettingsView): AppSettings {
 }
 
 export function useSettings() {
-  const fetched = useFetch<SettingsView>('/api/settings', { key: 'settings' })
+  const fetched = useAsyncData<SettingsView>('settings', () => api.getSettings())
 
   async function save(settings: AppSettings) {
-    const res = await $fetch<AppSettings | SettingsView>('/api/settings', { method: 'PUT', body: toAppSettings(settings) })
+    const res = await api.updateSettings(toAppSettings(settings))
     await fetched.refresh()
     return res
   }
 
   async function reindex() {
-    return await $fetch<{ indexed: number; removed: number; total: number }>('/api/sources/reindex', { method: 'POST' })
+    return await api.reindexSources()
   }
 
   /** Resolves once the initial GET has finished (await it in setup for SSR-consistent forms). */

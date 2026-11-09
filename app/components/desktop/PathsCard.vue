@@ -20,8 +20,8 @@ async function load() {
 }
 await load()
 
-// the banner/retry may change the state; keep the errors in sync with the server state
-watch(() => info.value?.phase, () => { load().catch(() => {}) })
+// the banner/retry may change the state; keep the errors in sync with the app state
+watch(() => info.value?.error, () => { load().catch(() => {}) })
 
 async function pick(target: 'dataset' | 'export') {
   const current = target === 'dataset' ? datasetPath.value : exportPath.value || datasetPath.value
@@ -44,13 +44,9 @@ async function save() {
       return
     }
     settingsFile.value = out.settings.settingsFile
-    if (out.restartError) {
-      toast.add({ title: 'パスは保存しましたがサーバーを再起動できません', description: out.restartError, icon: 'i-lucide-circle-alert', color: 'error' })
-    } else {
-      toast.add({ title: 'パスを保存し、サーバーを再起動しました', icon: 'i-lucide-check', color: 'success' })
-    }
+    toast.add({ title: 'パスを保存しました', icon: 'i-lucide-check', color: 'success' })
   } catch (err) {
-    toast.add({ title: '保存に失敗しました', description: String(err), icon: 'i-lucide-circle-alert', color: 'error' })
+    toast.add({ title: '保存に失敗しました', description: errorMessage(err), icon: 'i-lucide-circle-alert', color: 'error' })
   } finally {
     saving.value = false
   }
@@ -77,7 +73,7 @@ async function save() {
       </UFormField>
       <p v-if="settingsFile" class="text-xs text-muted break-all">設定ファイル: <span class="font-mono">{{ settingsFile }}</span></p>
       <div class="flex justify-end">
-        <UButton type="submit" label="保存して再起動" icon="i-lucide-save" :loading="saving" />
+        <UButton type="submit" label="保存" icon="i-lucide-save" :loading="saving" />
       </div>
     </form>
   </UCard>

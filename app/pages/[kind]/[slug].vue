@@ -12,9 +12,10 @@ const slug = computed(() => String(route.params.slug))
 const toast = useToast()
 const { update, remove } = useEntities()
 
-const { data: record, status, error, refresh } = await useFetch<EntityRecord>(
-  () => `/api/entities/${kind.value}/${encodeURIComponent(slug.value)}`,
-  { key: computed(() => entityKey(kind.value, slug.value)) },
+const { data: record, status, error, refresh } = await useAsyncData<EntityRecord>(
+  () => entityKey(kind.value, slug.value),
+  () => api.getEntity(kind.value, slug.value),
+  { watch: [kind, slug] },
 )
 
 useHead({ title: () => `${record.value?.name ?? slug.value} - Phrapedia` })
@@ -102,10 +103,6 @@ async function confirmDelete() {
 
 const subtitle = computed(() => [record.value?.name_th, record.value?.name_en].filter(Boolean).join(' ・ '))
 const notFound = computed(() => (error.value as { statusCode?: number } | null)?.statusCode === 404)
-// SSR: report the real status for a missing/failed record instead of 200.
-if (import.meta.server && error.value) {
-  setResponseStatus(useRequestEvent()!, notFound.value ? 404 : 500)
-}
 
 /** The AI saved this (or another) record through save_entity: reload it and drop local edits that are now stale. */
 async function onSaved(saved: { kind: EntityKind; slug: string; path?: string }) {
