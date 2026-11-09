@@ -55,7 +55,13 @@
   - このマシンで一度 `agy` を対話起動して **Google アカウントでサインイン** しておく（資格情報は OS のキーリングに保存され再利用されます）
   - サーバ用途: 環境変数 `GEMINI_API_KEY`（[Google AI Studio](https://aistudio.google.com/) で発行）を設定し、`~/.gemini/antigravity-cli/settings.json` に `{"modelProvider": "gemini"}` を書く
   - 旧 **Gemini CLI**（`npm i -g @google/gemini-cli`、有料枠 / API キー利用者向け）を使い続ける場合は 設定 →「CLI」で `Gemini CLI` を選ぶ
-- **Anthropic API キー**（チャット AI に使用。[Anthropic Console](https://console.anthropic.com/) で発行）
+- **Claude Code CLI（`claude`）**（チャット AI に使用。別途インストールが必要で、**API キーは不要**）
+  ```bash
+  claude --version     # 入っているか確認（導入手順: https://docs.claude.com/en/docs/claude-code/overview）
+  claude               # 一度対話起動して、Claude のアカウント（Pro / Max など）でログインしておく
+  ```
+  - チャットは `claude -p`（headless 実行）を子プロセスとして呼び出し、**`claude` にログインしたアカウントの契約枠**で動きます。`ANTHROPIC_API_KEY` 等が環境にあれば CLI がそちらを使いますが、アプリ側では何も扱いません。
+  - `claude` が PATH にない場合は 設定 →「AI」の「コマンド」に絶対パスを指定します。
   - チャット AI は **Claude 固定** です。Gemini（`agy`）はチャットの代わりにはならず、**インターネット検索による情報収集（`web_research` ツール）にだけ** 使われます。
 - Git（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
 
@@ -64,7 +70,7 @@
 ```bash
 git clone <このリポジトリ> phrapedia && cd phrapedia
 npm install
-cp .env.example .env      # NUXT_ANTHROPIC_API_KEY を記入（GEMINI_API_KEY も必要なら）
+cp .env.example .env      # 必要なら編集（チャットは `claude` のログインで動くので API キー不要。GEMINI_API_KEY は Web 調査用）
 npm run dev               # http://localhost:3000
 ```
 
@@ -101,7 +107,7 @@ Phrapedia はログイン機構のない「自分の PC で動かすツール」
 
 - 設定画面の値（CLI のコマンドパス、フォルダなど）はサーバ側でそのまま使われます。**信頼できる人だけが届くネットワーク**で動かしてください（`HOST=127.0.0.1` 推奨）。
 - ブラウザからの API 呼び出しには同一オリジン・JSON 限定のチェック（CSRF 対策）がかかっています。
-- API キーはブラウザへ渡さず、`.env` / 環境変数のみで扱います。
+- 認証情報（`GEMINI_API_KEY` など）はブラウザへ渡さず、`.env` / 環境変数のみで扱います。Claude のログイン情報は `claude` CLI が保持します。
 - アプリ内のチャット AI には Git 同期ツール（`sync_data`）を渡していません。GitHub への push は常に同期パネルからの操作です（自動プッシュ設定を除く）。
 
 ## Homebrew でインストール
@@ -117,7 +123,8 @@ brew install --cask phrapedia
 - 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
 - インストール後そのまま起動できます。cask がインストール時に隔離属性（quarantine）を外します（ad-hoc 署名のビルド）。
 - 更新: `brew upgrade --cask phrapedia`、またはアプリ起動時の更新確認。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
-- 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。API キー（`NUXT_ANTHROPIC_API_KEY` 等）は、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
+- チャットには **Claude Code CLI（`claude`）を別途インストール**してください（cask は `claude` に依存しません）。アプリは sidecar の PATH に `/opt/homebrew/bin`・`/usr/local/bin`・`$HOME/.local/bin` を足して `claude` を探します。それ以外の場所にある場合は 設定 →「AI」でコマンドの絶対パスを指定してください。
+- 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。`GEMINI_API_KEY` などは、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
 ## 情報の優先順位
 
@@ -175,9 +182,12 @@ brew install --cask phrapedia
 |---|---|---|---|
 | 一次資料フォルダ | `sourcesDir` | `sources` | 絶対パス、またはプロジェクトからの相対パス。`.env`: `NUXT_SOURCES_DIR` |
 | データフォルダ | `dataDir` | `data` | `data/<種類>/<slug>.md` の置き場所。Git 同期するならリポジトリ内に。`.env`: `NUXT_DATA_DIR` |
-| Claude モデル | `ai.anthropicModel` | `claude-sonnet-5-5` | `.env`: `NUXT_ANTHROPIC_MODEL` |
-| 最大トークン | `ai.maxTokens` | `8192` | 1 回の応答の最大出力トークン |
+| Claude モデル | `ai.model` | `claude-sonnet-5-5` | `claude --model` に渡す。`.env`: `NUXT_AI_MODEL`（旧設定 `ai.anthropicModel` は読み込み時に移行） |
+| 最大トークン | `ai.maxTokens` | `8192` | 1 回の応答の最大出力トークン（`CLAUDE_CODE_MAX_OUTPUT_TOKENS` で渡す） |
 | 追加の指示 | `ai.extraInstructions` | （空） | システムプロンプト末尾に追加される指示 |
+| Claude コマンド | `ai.command` | `claude` | 実行ファイル名または絶対パス。`.env`: `NUXT_CLAUDE_COMMAND` |
+| Claude 追加引数 | `ai.args` | （空） | `claude -p` に追加で渡す引数（例: `--effort low`） |
+| Claude タイムアウト | `ai.timeoutMs` | `600000` | 1 回の応答がこれを超えたら CLI を終了させる |
 | CLI | `gemini.engine` | `antigravity` | `antigravity`（`agy`）または `gemini-cli`（旧 `gemini`）。`.env`: `NUXT_GEMINI_ENGINE` |
 | コマンド | `gemini.command` | `agy` | 実行ファイル名または絶対パス（例: `~/.local/bin/agy`）。`.env`: `NUXT_GEMINI_COMMAND` |
 | 追加引数 | `gemini.args` | `[]` | CLI に渡す追加引数（1 行に 1 つ。例: `--print-timeout`, `--effort`） |
@@ -202,7 +212,7 @@ brew install --cask phrapedia
 
 絶対パスでない・存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
 
-API キーは画面からは設定できません（ブラウザに渡さないため）。`.env` の `NUXT_ANTHROPIC_API_KEY`（または `ANTHROPIC_API_KEY`）、`GEMINI_API_KEY` を使います。そのほか `NUXT_STATE_DIR`（PGlite の場所、既定 `.phrapedia`）、`PHRAPEDIA_ROOT`（プロジェクトルート、既定はカレントディレクトリ）があります。
+Web 調査用の `GEMINI_API_KEY` は画面からは設定できません（ブラウザに渡さないため）。`.env` か環境変数で設定します。チャットは `claude` のログイン（または環境の `ANTHROPIC_API_KEY`）を CLI がそのまま使うので、アプリ側の設定はありません。そのほか `NUXT_STATE_DIR`（PGlite の場所、既定 `.phrapedia`）、`PHRAPEDIA_ROOT`（プロジェクトルート、既定はカレントディレクトリ）があります。
 
 ## Git 同期
 
@@ -226,7 +236,7 @@ API キーは画面からは設定できません（ブラウザに渡さない�
 
 1. Render → **New → Blueprint** → この GitHub リポジトリを選択 → ブランチに **`render`** を指定して作成。
    `render.yaml` の内容（Web サービス `phrapedia`、永続ディスク `/var/data`、環境変数）が読み込まれます。
-2. Environment で秘密情報を設定: `NUXT_ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`NUXT_BASIC_AUTH_USER` / `NUXT_BASIC_AUTH_PASSWORD`（Basic 認証。公開 URL になるため必ず設定）。
+2. Environment で秘密情報を設定: `GEMINI_API_KEY`、`NUXT_BASIC_AUTH_USER` / `NUXT_BASIC_AUTH_PASSWORD`（Basic 認証。公開 URL になるため必ず設定）。
 3. 以後は `render` ブランチを更新するだけでデプロイが走ります。
 
 ```bash
@@ -399,8 +409,8 @@ node packaging/homebrew/update-cask.mjs --version 0.1.0 \
 | `agy` が終了コード 3 | モデル／エージェント側のエラー、または `--print-timeout` による打ち切り。部分的な応答があればそのまま使われる |
 | 旧 Gemini CLI が認証エラー（終了コード 41） | `GEMINI_API_KEY` を `.env` かシェルに設定するか、ターミナルで一度 `gemini` を起動してログイン |
 | **Web 調査がタイムアウト** | 設定 →「タイムアウト」を延ばす（例: 300000）。モデルを `flash` にすると速くなる。同じ質問はキャッシュされる |
-| **チャットが「API キーが設定されていません」** | `.env` に `NUXT_ANTHROPIC_API_KEY=sk-ant-...` を書いてサーバを再起動（チャットは Claude 専用。Gemini では代替できません） |
-| API キーが無効（401） | キーの値・有効期限・組織の利用制限を確認 |
+| **チャットが「Claude Code CLI（claude）が見つかりません」** | `claude --version` が通るか確認。PATH が通らない環境（Finder 起動のデスクトップアプリ、サービス起動）では 設定 →「AI」→「コマンド」に絶対パス（`which claude` の結果、通常 `~/.local/bin/claude`）を入れる。チャットは Claude 専用で Gemini では代替できません |
+| チャットが「ログインしていないようです」 | ターミナルで `claude` を一度起動してログイン（Pro / Max など）。別マシンでは各マシンでログインが必要 |
 | **PGlite のエラー / 起動しない** | `.phrapedia/` は消しても再生成されます（設定・チャット履歴・キャッシュは失われ、レコードと一次資料は無事）。同じ `.phrapedia/` を 2 つのサーバで同時に開くと壊れることがあるので、開発サーバと本番サーバを同時に起動しない（どうしても必要なら `NUXT_STATE_DIR` を分ける） |
 | 一次資料が検索に出ない | パス（設定 → 一次資料フォルダ）を確認。`.` で始まるフォルダは対象外。PDF は本文検索非対応 |
 | 同期でエラー | ターミナルで `git status` / `git pull --rebase` を実行して状態を確認。リモートの認証（SSH 鍵 / トークン）を確認 |
