@@ -2,7 +2,7 @@
 
 use crate::chat::claude::McpLaunch;
 use crate::chat::stream::ChatStreamEvent;
-use crate::chat::turn::{prepare_chat_turn, run_chat_turn, validate_request, ChatRequest};
+use crate::chat::turn::{parse_request, prepare_chat_turn, run_chat_turn, validate_request};
 use crate::core::error::{AppError, Result};
 use crate::core::Core;
 use std::collections::HashMap;
@@ -54,7 +54,8 @@ fn mcp_launch(core: &Core) -> Result<McpLaunch> {
 
 /// Resolves after the turn finished (`done` / `error` already sent). Only invalid input rejects.
 #[tauri::command(rename_all = "camelCase")]
-pub async fn chat_send(core: State<'_, Arc<Core>>, turns: State<'_, ChatTurns>, request: ChatRequest, on_event: Channel<ChatStreamEvent>) -> Result<()> {
+pub async fn chat_send(core: State<'_, Arc<Core>>, turns: State<'_, ChatTurns>, request: serde_json::Value, on_event: Channel<ChatStreamEvent>) -> Result<()> {
+    let request = parse_request(request)?;
     let (message, slug) = validate_request(&request)?;
     let core = core.inner().clone();
     let (tx, rx) = turns.register(&request.turn_id).ok_or_else(|| AppError::invalid("同じ turnId のチャットが進行中です"))?;

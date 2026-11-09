@@ -175,7 +175,7 @@ interface ResearchResult { text: string; engine?: string; model?: string; cached
 | `patch_chat_session` | `{ id, patch: { slug?: string \| null, title?: string } }` | `ChatSession` | `PATCH …/:id` |
 | `delete_chat_messages` | `{ id, ids: string[] }` | `{ ok: true, deleted: number }` | `DELETE …/:id/messages`（削除が 1 件以上なら `claudeSessionId` をリセット） |
 
-## 3. チャット（chat worker 担当・契約のみ）
+## 3. チャット（実装済み: src-tauri/src/chat/ + commands/chat.rs）
 
 REST の SSE `POST /api/chat` を **Channel 配信の command** に置換する。
 
@@ -199,6 +199,7 @@ await invoke<void>('chat_abort', { turnId })                // 進行中ター�
 
 - `chat_send` は **完了まで resolve しない**（ストリームは Channel）。最初のイベントは必ず `session`、最後は `done` か `error`。入力不正（message 空 / kind 不正）は reject（`invalid_argument`）。それ以外のターン内エラーは `{ type: 'error', message }` イベントで流し、`chat_send` 自体は resolve する（旧 SSE と同じ）。
 - 中断時の振る舞い（parts に「（ユーザーが停止しました）」を残して `done`）は旧実装のまま。
+- 実装メモ（契約は変えていない）: 同じ `turnId` の同時実行は `invalid_argument`。`claude` が見つからない等の準備段階の失敗は `session` より前に `error` イベントのみ流れて resolve する。WebView が閉じて Channel 送信が失敗したら CLI を中断する。system prompt と `--mcp-config` は argv ではなく 0600 の一時ファイルで CLI に渡す。
 - `ChatStreamEvent` は `shared/types/chat.ts` のものを **変更しない**:
 
 ```ts
@@ -227,7 +228,7 @@ Rust では `#[serde(tag = "type", rename_all = "kebab-case")]` の enum（フ�
 - `core.research()`: `run` `probe`、`build_research_prompt`
 - `core::cli::resolve_command(command) -> PathBuf`、`core::cli::child_env()`（GUI 起動の最小 PATH を補った env。`/opt/homebrew/bin` `/usr/local/bin` `$HOME/.local/bin` `$HOME/.claude/local` と login shell の PATH）
 
-## 4. MCP サブコマンド（chat worker 担当・契約のみ）
+## 4. MCP サブコマンド（実装済み: src-tauri/src/mcp/）
 
 claude CLI に渡す MCP は **自分自身のバイナリの stdio サブコマンド**（HTTP /mcp は廃止）。
 
@@ -242,6 +243,7 @@ claude CLI に渡す MCP は **自分自身のバイナリの stdio サブコマ
 
 - `phrapedia mcp ...` は **GUI を起動せず**（`main.rs` で最初に argv を見て分岐。Tauri を初期化しない）、stdio で MCP を話す。AppDirs は引数で受ける（Tauri 無しで config dir を解決しないため。省略時は OS 標準 + identifier `jp.grrow.phrapedia`）。
 - サーバ名は `phrapedia`、ツール名は従来どおり（`mcp__phrapedia__<tool>`）。ツールは `list_entities` `get_entity` `save_entity` `entity_template` `list_sources` `search_sources` `read_source`（画像は image content）`web_research` `sync_status` `sync_data` `update_draft`（ack のみ）。入出力スキーマと説明文は `server/mcp/tools/*.ts` を移植元とする（チャットでは `sync_data` を許可しない規則も維持）。リソース `phrapedia://{kind}/{slug}` とプロンプト `research_record` も同様。
+- 外部クライアント（Claude Code 等）からも同じコマンドで使える（設定例は docs/reports/rust-native.md の chat / MCP 節）。プロンプト名は `research_record`、resource は `phrapedia://{kind}/{slug}`。
 - 実行ごとに設定ファイル・SQLite を読み直す（GUI プロセスと別プロセスなので、書込は SQLite の WAL + busy_timeout で共存）。
 
 ## 5. frontend 向け: 置換対応表

@@ -33,12 +33,27 @@ pub struct ChatRequest {
     pub draft: String,
 }
 
+/// Parse the `request` argument of `chat_send`. Done by hand (not by Tauri's argument decoding) so that a bad `kind` or a
+/// missing field rejects with a structured `invalid_argument` instead of a plain deserialization string.
+pub fn parse_request(v: serde_json::Value) -> Result<ChatRequest> {
+    let Some(obj) = v.as_object() else { return Err(AppError::invalid("request はオブジェクトで指定してください")) };
+    match obj.get("kind").and_then(serde_json::Value::as_str) {
+        Some(k) => {
+            assert_kind(k)?;
+        }
+        None => return Err(AppError::invalid("kind が必要です")),
+    }
+    if !obj.get("message").is_some_and(serde_json::Value::is_string) {
+        return Err(AppError::invalid("message が必要です"));
+    }
+    serde_json::from_value(v).map_err(|e| AppError::invalid("チャットのリクエストが不正です").with_detail(e.to_string()))
+}
+
 /// Input validation of the old POST /api/chat (these reject; everything later is reported through events).
 pub fn validate_request(req: &ChatRequest) -> Result<(String, Option<String>)> {
     if req.turn_id.trim().is_empty() {
         return Err(AppError::invalid("turnId が必要です"));
     }
-    assert_kind(req.kind.as_str())?;
     let slug = match req.slug.as_deref() {
         Some(s) if !s.is_empty() => Some(assert_slug(s)?),
         _ => None,
@@ -260,6 +275,18 @@ mod tests {
     fn request_deserializes_the_frontend_shape() {
         let r: ChatRequest = serde_json::from_value(serde_json::json!({"turnId":"u","kind":"temples","slug":null,"message":"hi","draft":"d"})).unwrap();
         assert_eq!((r.turn_id.as_str(), r.kind, r.slug, r.session_id, r.draft.as_str()), ("u", EntityKind::Temples, None, None, "d"));
+    }
+
+    #[test]
+    fn parse_request_rejects_bad_input_as_invalid_argument() {
+        use serde_json::json;
+        use crate::core::error::ErrorCode::InvalidArgument;
+        let ok = parse_request(json!({"turnId":"t","kind":"monks","message":"hi","draft":""})).unwrap();
+        assert_eq!(ok.kind, EntityKind::Monks);
+        for bad in [json!("x"), json!({"turnId":"t","message":"hi"}), json!({"turnId":"t","kind":"bogus","message":"hi"}), json!({"turnId":"t","kind":"monks"}), json!({"kind":"monks","message":"hi"}), json!({"turnId":"t","kind":"monks","message":"hi","draft":5})] {
+            let e = parse_request(bad.clone()).unwrap_err();
+            assert_eq!(e.code, InvalidArgument, "{bad}");
+        }
     }
 
     #[test]
