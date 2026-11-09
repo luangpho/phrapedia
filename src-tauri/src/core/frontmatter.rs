@@ -83,13 +83,12 @@ fn yaml_to_json(v: serde_yaml_ng::Value) -> Value {
 pub fn stringify(data: &Data, body: &str) -> String {
     let mut yaml = String::new();
     emit_map(data, 0, &mut yaml);
-    let yaml = yaml.trim_end();
+    // The old `yaml` package writes an empty mapping as `{}`.
+    let yaml = if data.is_empty() { "{}" } else { yaml.trim_end() };
     let trimmed = strip_leading_blank(body);
-    let mut out = format!("---\n{yaml}\n---\n\n{trimmed}");
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out
+    // `trimmedBody.endsWith('\n') ? trimmedBody : trimmedBody + '\n'` (so an empty body still gets one newline)
+    let nl = if trimmed.ends_with('\n') { "" } else { "\n" };
+    format!("---\n{yaml}\n---\n\n{trimmed}{nl}")
 }
 
 /// `body.replace(/^\s*\n/, '')`
@@ -207,7 +206,7 @@ fn emit_string(s: &str, implicit_key: bool, indent: usize) -> String {
     if implicit_key && s.contains('\n') {
         return quoted(s);
     }
-    if needs_quote_by_syntax(s) || contains_document_marker(s) || resolves_to_non_string(s) {
+    if needs_quote_by_syntax(s) || resolves_to_non_string(s) {
         // multi-line values that need quoting are emitted as block scalars (handled by the caller when possible)
         return quoted(s);
     }
@@ -274,11 +273,6 @@ fn needs_quote_by_syntax(s: &str) -> bool {
         }
     }
     matches!(chars[chars.len() - 1], '\n' | '\t' | ' ' | ':')
-}
-
-/// `/^(%|---|\.\.\.)/m`
-fn contains_document_marker(s: &str) -> bool {
-    s.split('\n').any(|l| l.starts_with('%') || l.starts_with("---") || l.starts_with("..."))
 }
 
 /// Strings that the YAML 1.2 core schema would read back as null / bool / int / float.
@@ -350,41 +344,55 @@ fn is_core_float_or_int(s: &str) -> bool {
     i == b.len()
 }
 
-/// Literal block scalar (`|`, `|-`, `|+`) for a multi-line string. `indent` is the content indentation.
-fn block_string(value: &str, indent: usize) -> String {
-    let pad = spaces(indent);
-    let trimmed_end_len = value.trim_end_matches(['\n', '\t', ' ']).len();
-    let end_str = &value[trimmed_end_len..];
-    let body = &value[..trimmed_end_len];
-    let chomp = match end_str.find('\n') {
-        None => "-",
-        Some(pos) if value == end_str || pos != end_str.len() - 1 => "+",
-        Some(_) => "",
-    };
-    let leading_spaces = body.chars().take_while(|c| *c == ' ' || *c == '\n').any(|c| c == ' ');
-    let header = format!("|{}{}", if leading_spaces { "2" } else { "" }, chomp);
-    let mut out = String::new();
-    out.push_str(&header);
-    out.push('\n');
-    let mut first = true;
-    for line in body.split('\n') {
-        if !first {
-            out.push('\n');
+/// Append `pad` after every run of newlines in `s` (JS `s.replace(/\n+/g, `$&${pad}`)`). With `skip_trailing` a run at the
+/// very end of `s` is left alone (`/\n+(?!\n|$)/g`).
+fn pad_newline_runs(s: &str, pad: &str, skip_trailing: bool) -> String {
+    let mut out = String::with_capacity(s.len() + pad.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        out.push(chars[i]);
+        if chars[i] == '\n' && chars.get(i + 1) != Some(&'\n') && !(skip_trailing && i + 1 == chars.len()) {
+            out.push_str(pad);
         }
-        first = false;
-        if !line.is_empty() {
-            out.push_str(&pad);
-            out.push_str(line);
-        }
-    }
-    // trailing newlines kept by `+` / `` chomping
-    let nl = end_str.matches('\n').count();
-    if chomp == "+" {
-        for _ in 0..nl {
-            out.push('\n');
-        }
+        i += 1;
     }
     out
+}
+
+/// Literal block scalar (`|`, `|-`, `|+`) for a multi-line string; a port of `blockString` of the `yaml` package.
+/// `indent` is the content indentation. Trailing spaces / tabs of the last line and leading blank lines are kept.
+fn block_string(value: &str, indent: usize) -> String {
+    let pad = spaces(indent);
+    let end_start = value.trim_end_matches(['\n', '\t', ' ']).len();
+    let mut end = value[end_start..].to_string();
+    let chomp = match end.find('\n') {
+        None => "-",
+        Some(pos) if value.len() == end.len() || pos != end.len() - 1 => "+",
+        Some(_) => "",
+    };
+    let body = &value[..end_start];
+    if end.ends_with('\n') {
+        end.pop();
+    }
+    let end = pad_newline_runs(&end, &pad, true);
+    // leading blank lines / spaces
+    let mut start_with_space = false;
+    let mut start_nl: Option<usize> = None;
+    for (i, c) in body.char_indices() {
+        match c {
+            ' ' => start_with_space = true,
+            '\n' => start_nl = Some(i),
+            _ => break,
+        }
+    }
+    let (start, rest) = match start_nl {
+        Some(i) => body.split_at(i + 1),
+        None => ("", body),
+    };
+    let start = pad_newline_runs(start, &pad, false);
+    let rest = pad_newline_runs(rest, &pad, false);
+    format!("|{}{}\n{}{}{}{}", if start_with_space { "2" } else { "" }, chomp, pad, start, rest, end)
 }
 
 #[cfg(test)]
@@ -467,6 +475,33 @@ mod tests {
         let raw = stringify(&data, "");
         assert!(raw.contains("kept: |\n  a\n  b\nnote: |-\n  line1\n  line2\n"), "{raw}");
         assert_eq!(parse(&raw).unwrap().data, data);
+    }
+
+    #[test]
+    fn block_scalars_keep_trailing_spaces_and_do_not_grow_on_resave() {
+        // trailing space on the last line, `|+` keep-chomp in the middle, leading blank line (found by diffing against the `yaml` package)
+        let data = obj(json!({ "a": "x\nfoo ", "keep": "x\n\n", "lead": "\nlead", "z": "end" }));
+        let raw = stringify(&data, "b");
+        assert_eq!(parse(&raw).unwrap().data, data);
+        let again = stringify(&parse(&raw).unwrap().data, &parse(&raw).unwrap().body);
+        assert_eq!(raw, again);
+        assert!(raw.contains("a: |-\n  x\n  foo \n"), "{raw}");
+        assert!(raw.contains("keep: |+\n  x\n\nlead:"), "{raw}");
+        assert!(raw.contains("lead: |-\n  \n  lead\n"), "{raw}");
+    }
+
+    #[test]
+    fn document_marker_lookalikes_stay_plain_like_the_old_output() {
+        let data = obj(json!({ "a": "---", "b": "...and so on", "c": "--- x" }));
+        let raw = stringify(&data, "b");
+        assert!(raw.contains("a: ---\nb: ...and so on\nc: --- x\n"), "{raw}");
+        assert_eq!(parse(&raw).unwrap().data, data);
+    }
+
+    #[test]
+    fn empty_data_and_empty_body_match_the_old_output() {
+        assert_eq!(stringify(&Data::new(), "only"), "---\n{}\n---\n\nonly\n");
+        assert_eq!(stringify(&obj(json!({ "n": "x" })), ""), "---\nn: x\n---\n\n\n");
     }
 
     #[test]

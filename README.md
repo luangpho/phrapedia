@@ -13,9 +13,10 @@
 この構成は旧 Nuxt SSR + Node 版の全面再実装です。次の点が旧版と非互換です。
 
 - **デスクトップ専用**になりました。ブラウザで開く Web 版（`npm run dev` / `npm start` のサーバ、Render 配備）は **旧 branch のまま** で、この構成には含まれません。
-- **旧 PGlite（`.phrapedia/`）のデータは移行されません**（チャット履歴・一次資料の検索インデックス・Web 調査キャッシュ）。インデックスとキャッシュは自動で作り直されます。チャット履歴は引き継がれません。レコード（`data/`）と一次資料は Markdown なのでそのまま使えます。
+- **旧 PGlite（`.phrapedia/`）のデータは移行されません**（チャット履歴・一次資料の検索インデックス・Web 調査キャッシュ・**旧版で保存したアプリ設定（AI / Gemini / Git の設定）**）。設定は既定値に戻るので、必要なら設定画面で入れ直してください（`settings.json` の 2 パスは同じ場所・同じキーなのでそのまま使えます）。インデックスとキャッシュは自動で作り直されます。チャット履歴は引き継がれません。レコード（`data/`）と一次資料は Markdown なのでそのまま使えます。
 - **HTTP の `/mcp`（`http://localhost:3000/mcp`）は廃止**しました。代わりに `phrapedia mcp`（stdio）を使います（[MCP で使う](#mcp-で使う)）。
 - REST API・SSE は無く、フロントは Tauri command を直接呼びます。
+- **対応環境は macOS（Homebrew cask / dmg）と Linux（deb / rpm / AppImage）**です。Windows は未検証で、子プロセスの process group 単位の終了（`claude` の孫プロセスの回収）が未実装（no-op）です。
 - `.env` は読みません。パスは設定画面、`GEMINI_API_KEY` などはプロセスの環境変数で渡します。
 
 ---

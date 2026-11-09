@@ -45,10 +45,39 @@ const MIGRATIONS: &[&str] = &[
     );",
 ];
 
+/// Open (and migrate) the store. A file that is not a SQLite database / is corrupt is set aside as
+/// `<name>.corrupt-<unix time>` and a fresh store is created: the data in it (chat history, search index, research cache)
+/// is rebuildable or disposable, and the records themselves are Markdown files.
 pub fn open(path: &std::path::Path) -> Result<Connection> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::io("状態保存フォルダを作れません", e))?;
     }
+    match open_raw(path) {
+        Err(e) if is_corrupt(&e) => {
+            let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            for suffix in ["", "-wal", "-shm"] {
+                let mut from = path.as_os_str().to_owned();
+                from.push(suffix);
+                let mut to = path.as_os_str().to_owned();
+                to.push(format!(".corrupt-{stamp}{suffix}"));
+                let _ = fs::rename(&from, &to);
+            }
+            eprintln!("phrapedia: {} was not a usable database ({e}); moved aside and recreated", path.display());
+            Ok(open_raw(path)?)
+        }
+        other => Ok(other?),
+    }
+}
+
+fn is_corrupt(e: &rusqlite::Error) -> bool {
+    matches!(
+        e,
+        rusqlite::Error::SqliteFailure(f, _)
+            if matches!(f.code, rusqlite::ErrorCode::NotADatabase | rusqlite::ErrorCode::DatabaseCorrupt)
+    )
+}
+
+fn open_raw(path: &std::path::Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;")?;
@@ -63,7 +92,7 @@ pub fn open_in_memory() -> Result<Connection> {
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> Result<()> {
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let current: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(current) {
         // BEGIN IMMEDIATE so two processes starting at once do not both run the same migration
@@ -78,7 +107,7 @@ fn migrate(conn: &Connection) -> Result<()> {
             Ok(()) => conn.execute_batch("COMMIT")?,
             Err(e) => {
                 let _ = conn.execute_batch("ROLLBACK");
-                return Err(e.into());
+                return Err(e);
             }
         }
     }
@@ -230,6 +259,19 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_corrupt_database_file_is_set_aside_and_recreated() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("state").join("phrapedia.sqlite");
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(&p, vec![0x5au8; 4096]).unwrap();
+        let conn = open(&p).unwrap();
+        let n: i64 = conn.query_row("SELECT count(*) FROM chat_sessions", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        let moved: Vec<_> = fs::read_dir(p.parent().unwrap()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".corrupt-")).collect();
+        assert_eq!(moved.len(), 1, "the broken file is kept for inspection");
+    }
+
     use super::super::testutil::core_with_dataset;
     use super::*;
     use serde_json::json;

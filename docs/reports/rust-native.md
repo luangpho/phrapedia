@@ -245,3 +245,52 @@ GUI は不要。バイナリのパスと、アプリが使っている設定 dir
 - 外部クライアント（Claude Code 以外）との MCP 接続。web_research（agy）・sync_data（実 remote）の実行。
 - GitHub Actions 上での release workflow 実行（ローカルでは YAML parse と run 部確認、release.sh は dry-run まで）。
 - src-tauri 内に旧 Nitro 実装を指すコメント（tools.rs / commands/mod.rs / git.rs / store.rs / path_settings.rs の "sidecar"）が残る。履歴説明なので触っていない。
+
+## review 節（clean clone による全面レビュー）
+
+対象: PR #7（`feat/rust-native` 4430c81）。旧実装との比較基準は既定 branch（08a01bc）の `server/**`。
+
+### 指摘一覧
+
+| # | severity | 内容 | 状態 |
+|---|---|---|---|
+| 1 | medium | frontmatter の block scalar 出力が旧 `yaml` パッケージと不一致。(a) 複数行文字列の**最終行末の空白・タブが保存で消える**（データ欠落）、(b) `\|+`（keep）の値が後続キーの前で**保存のたびに空行が 1 行増える**、(c) 先頭が空行の値の整形が違う | 修正済み（`block_string` を `yaml` の `blockString` の移植に置換。テスト追加） |
+| 2 | medium | SQLite が壊れている（SQLite ファイルでない／corrupt）と、チャット履歴・検索・調査キャッシュが**恒久的に失敗**（`file is not a database`）。復旧手段なし | 修正済み（`store::open` が `phrapedia.sqlite.corrupt-<unix 時刻>` へ退避して作り直す。`-wal`/`-shm` も。テスト追加、実バイナリの `mcp` で確認） |
+| 3 | low | frontmatter 空 map／本文空の出力が旧実装と違う（旧: `{}`、本文空は末尾に空行 1 行追加） | 修正済み |
+| 4 | low | 値が `---` / `...` で始まる 1 行の文字列を引用符で包む（旧は plain）。旧実装が書いた `k: ...続き` を保存し直すと差分が出る | 修正済み（1 行の値は旧と同じく plain） |
+| 5 | low（文書） | 旧版で保存したアプリ設定（AI / Gemini / Git。旧実装は PGlite の `settings` テーブル保存）が移行されず既定値に戻ることが README に無かった。Windows が未検証・process group 終了が no-op なことが ARCHITECTURE 以外に無かった | 修正済み（README「旧版からの変更点」に追記） |
+| 6 | info | frontmatter の数値: `.inf` / `.nan` は `null` になる（旧は `.inf` / `.nan` のまま）。`1e-5` のような小さな float は `1e-5` で出力される（旧は `0.00001`）。YAML の `1.0` / `1e3` は元の表記ではなく数値として `1.0` / `1000.0` で出す（旧は `1` / `1000`）。64bit を超える整数は旧実装が精度を落とすのに対し Rust は保持 | 未修正（実データに無く影響は極小。仕様差として記録） |
+| 7 | info | 空白だけの複数行値（`"\n"` 等）は引用符で出力（旧は `\|+` ブロック）、`\r` の直後の空白のエスケープ有無、アンカー（`&a`）は展開される、整数様キー（`1:`）の順序はファイル順を保持（旧は JS の整数キー先頭化で並べ替わる＝改善） | 未修正（実害なし） |
+| 8 | info | 壊れた JSON-RPC 行（`{broken json`）には応答を返さず読み捨てる（JSON-RPC の Parse error 応答は出ない）。プロセスは生存し以降の要求は処理される | 未修正（rmcp の挙動。クライアントは影響を受けない） |
+| 9 | info | `read_source_bytes` は一次資料ファイルを全読みする（サイズ上限なし）。`ai.args` は設定値をそのまま `claude` に渡す（利用者自身の設定） | 未修正 |
+| 10 | info | `build` / `preview` / `start` / `start:render` / `render.yaml` / `scripts/render-start.mjs` は残置（動かない）。`path_settings.rs` ほか数か所に「sidecar」コメントが残る。`package-lock.json` に `@electric-sql/pglite` / `nitropack` が残る（`@nuxt/ui` / `nuxt generate` の依存。実行時には使わない）。`nuxt typecheck` は `vue-router/volar/sfc-route-blocks` の解決警告を出すが exit 0 | 未修正（利用者判断） |
+
+### 旧実装との差分確認の方法（観点 1）
+
+- 旧 `server/utils/frontmatter.ts`（npm `yaml`、`lineWidth:0`、plain）と Rust の `frontmatter::{parse,stringify}` を、同じ入力で実行して出力を突き合わせた（node 側は `node_modules/yaml` で旧ロジックを再現、Rust 側は使い捨ての example）。入力: 同梱 `data/` 全 `.md`、手書き 120 ケース（BOM / CRLF / 空ファイル / 閉じ無し / 日付 / 真偽に見える語 / `|` `|+` `|-` `>` / 配列 / 入れ子 / アンカー / 不正 YAML ほか）、乱数 4000 ケース（引用符・コロン・`#`・改行・タイ語・日本語・制御文字を含む文字列を map / 配列 / 入れ子に）。
+- 修正前: 乱数 188 / 4000 件が不一致（上記 #1 が主因）。修正後: 19 / 4000 件で、すべて空白だけの複数行値と `\r` 直後の空白（#7）。手書き 120 ケースの不一致は #6 / #7 の 6 件のみ。
+- 同梱 `data/` の monks / temples 全レコード（4 件）は、`get_entity` → 保存の往復で `updated_at` 以外に差分なし（既存テスト `saving_a_bundled_record_changes_only_updated_at`）。`data/README.md` / `data/amulets/README.md` は frontmatter の無い文書で、一覧からも除外される。
+
+### 確認して問題なしとした点
+
+- パス検証: `safe_join` は `..`・NUL・`\` 区切り・symlink 脱出を拒否（既存テストあり）。MCP 経由でも `kind=../etc`、`slug=../../x`、`slug=../evil` での保存、`read_source ../../etc/passwd`、`phrapedia://monks/../../x` が拒否される（実バイナリで確認）。entities の書き込みは `data/<kind>/<検証済み slug>.md` のみ。asset protocol は未使用（画像 / PDF は `read_source_bytes` → Blob）。capabilities は `core:default` / `dialog:allow-open` / `dialog:allow-message` / `updater:default` / `process:allow-restart` のみ。
+- 子プロセス: `claude` の argv に system prompt・MCP 設定が載らない（実機 `ps` 51 回採取で不検出）、ユーザ入力は stdin（`-` 始まりでも安全）、git は `--` と `is_safe_git_name` で引数注入を防ぐ、シェルを経由しない（login shell の PATH 取得だけ `$SHELL -lc`、4 秒 timeout、`__PH_PATH__…__PH_END__` で rc 出力の混入を無効化）。
+- チャット: stream-json 変換（partial の重複防止、tool_use / tool_result の対応、`update_draft` → `draft`、`save_entity` 成功 → `saved`、error result、中断時の未完 tool）、`sync_data` は allowedTools から除外 + disallowedTools、同一 `turnId` の二重実行は拒否。
+- MCP: ツール 11 個は旧 `server/mcp/tools/*` と同名・同数、resource 1 / prompt 1 も対応。失敗は `isError:true`、未知ツールは JSON-RPC invalid params、stdout は JSON-RPC のみ（ログは stderr）、stdin 閉鎖で exit 0、`mcp` は GUI を起動しない。
+- REST ↔ command: 旧 `server/api/**` 25 エンドポイントがすべて command に 1 対 1 で対応。フロント（`app/utils/api.ts`）の invoke 名・引数名（camelCase）は `generate_handler` と一致。
+- 配布: `tauri.conf.json` の identifier / productName / version / updater pubkey は既定 branch と同一、bundle に `.output/server` なし、cask に `depends_on node` なし（`preflight_steps` / `auto_updates` 維持）、`release.yml` は既定 branch と無変更で node は build 時のみ。version は 0.1.3 のまま。
+
+### テスト結果（Linux/204）
+
+- `npm ci` / `npm test`（6 files・83 tests）/ `npm run typecheck`（exit 0・TS エラー 0）: 通過。
+- `cd src-tauri && cargo check` / `cargo clippy --all-targets -- -D warnings` / `cargo test`（lib 147 + mcp_stdio 3）: 通過（修正後）。
+- `npm run tauri:build`: deb / rpm / AppImage を生成。xvfb で PATH に node / npx が無い環境で 30 秒起動してクラッシュ無し（timeout で終了、Xvfb / phrapedia の残存なし）。
+- `phrapedia mcp` に stdio で initialize → tools/list → tools/call(list_entities, 同梱 data のコピー)。加えて壊れた JSON、未知ツール、必須引数欠落、不正 kind、`..` を含む slug / path / URI、5MB の slug、検索クエリへの SQL 風文字列、`update_draft`（ack のみ）を流し、いずれも期待どおり（クラッシュ・stdout 汚染なし）。
+- 実 `claude`（2.1.317、`~/.local/bin/claude`、CLAUDECODE 系 env 除去）: `chat_smoke` の roundtrip / abort / resume がすべて OK（`ps` に prompt・設定の漏れなし、終了後に子孫プロセスなし）。
+
+### 未検証（review）
+
+- macOS / Windows 実機、GitHub Actions 上の `release.yml` 実行、notarize / updater の実更新。
+- GUI の実操作（画像・PDF 表示、未保存ガード、確認ダイアログ、チャットのストリーム表示 / 停止、設定画面のフォルダ選択）。xvfb は起動確認のみ。ブラウザ単体での実描画も未確認（`api.ts` の import 時例外なしは vitest で確認）。
+- 大規模 dataset での index / 検索性能、GUI と `phrapedia mcp` の同時書き込みの長時間負荷（WAL + busy_timeout の設計確認のみ）。
+- `web_research`（`agy` / `gemini` 実行）と `sync_data`（実 remote）の実行。
