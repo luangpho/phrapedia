@@ -22,6 +22,7 @@ export default defineNuxtPlugin(async () => {
   const nativeFetch = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
     nativeFetch(typeof input === 'string' ? apiUrl(input) : input, init)
-  // fire and forget: never delays startup; failures are swallowed inside
-  void useUpdater().checkOnce()
+  // fire and forget: never delays startup. Only decides whether the header update icon shows and runs a silent check
+  // (no dialog); updating itself starts from the icon.
+  void useUpdater().init()
 })
