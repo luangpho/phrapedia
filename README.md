@@ -115,8 +115,8 @@ brew install --cask phrapedia
 
 - cask は `depends_on formula: "node"` を持つので、Homebrew の `node` も一緒に入ります。アプリは `node` を子プロセス（sidecar）として起動します。
 - 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
-- 署名・notarization が未設定のビルドは Gatekeeper に止められることがあります（[署名・notarization の設定](#署名notarization-の設定)）。
-- 更新: `brew upgrade --cask phrapedia`。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
+- インストール後そのまま起動できます。cask がインストール時に隔離属性（quarantine）を外します（ad-hoc 署名のビルド）。
+- 更新: `brew upgrade --cask phrapedia`、またはアプリ起動時の更新確認。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
 - 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。API キー（`NUXT_ANTHROPIC_API_KEY` 等）は、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
 ## 情報の優先順位

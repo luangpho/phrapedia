@@ -31,3 +31,11 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 - 実際の GitHub Actions 上で、matrix 2 本の `latest.json` に `darwin-aarch64` / `darwin-x86_64` が両方載ることは、鍵登録後の最初の release で要確認（tauri-action の仕様に基づく想定で、CI 上では未検証）。
 - macOS 実機での release.sh 実行（bash 3.2）とアプリ内更新の動作は未検証（Linux のみ確認）。
 - `npm run typecheck` の vue-router volar 警告は別件。
+
+## 追加作業（cask の bantou 同形化・updater 公開鍵）
+
+- cask: `packaging/homebrew/Casks/phrapedia.rb` に `auto_updates true` と `preflight_steps`（`xattr -dr com.apple.quarantine` のみ。再署名しない）を追加。arch arm/intel・`depends_on formula: "node"`・zap は据え置き。
+- `tests/update-cask.test.ts` を追加: 新テンプレートで `update-cask.mjs` が version / sha256 (arm・intel) を書き換え、preflight_steps 等が残ることを確認。
+- `src-tauri/tauri.updater.conf.json` の pubkey に公開鍵を設定。release.yml は `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を空文字で明示（secret は参照しない）。
+- README「Homebrew でインストール」: 右クリックで開く・xattr 手打ちの案内なし。cask が隔離属性を外す旨に変更。
+- 確認: `npm test` 63 passed、typecheck 終了コード 0、js-yaml parse と run 部抽出で updater 有効（`--config` と env）/ 無効の両分岐を確認。ruby は無く `ruby -c` は省略。
