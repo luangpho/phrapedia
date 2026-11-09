@@ -36,7 +36,11 @@ const addLabel = computed(() => `${kindLabel(kind.value as EntityKind)}を追加
           <UIcon name="i-lucide-book-open-text" class="size-5 text-primary" />
           Phrapedia
         </NuxtLink>
-        <UDashboardSidebarCollapse :class="collapsed ? 'mx-auto' : 'ms-auto'" aria-label="サイドバーの折りたたみ" />
+        <div class="flex items-center gap-1" :class="collapsed ? 'mx-auto' : 'ms-auto'">
+          <!-- collapsed: the header only fits one icon, so the update icon moves to the footer -->
+          <DesktopUpdateButton v-if="!collapsed" />
+          <UDashboardSidebarCollapse aria-label="サイドバーの折りたたみ" />
+        </div>
       </template>
 
       <template #default="{ collapsed }">
@@ -73,6 +77,7 @@ const addLabel = computed(() => `${kindLabel(kind.value as EntityKind)}を追加
       </template>
 
       <template #footer="{ collapsed }">
+        <DesktopUpdateButton v-if="collapsed" class="justify-center" />
         <SyncStatusButton :collapsed="collapsed" />
         <UButton
           to="/sources"

@@ -250,6 +250,17 @@ async fn restart_sidecar(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || start_sidecar(&app)).await.map_err(|e| e.to_string())
 }
 
+/// True when this build carries `plugins.updater` (merged in by tauri.updater.conf.json). The frontend shows the
+/// header update icon only then; the plugin itself is registered under the same condition in `run`.
+fn updater_configured(app: &AppHandle) -> bool {
+    app.config().plugins.0.contains_key("updater")
+}
+
+#[tauri::command]
+fn updater_enabled(app: AppHandle) -> bool {
+    updater_configured(&app)
+}
+
 fn stop_sidecar(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut g) = state.0.lock() {
@@ -268,8 +279,8 @@ pub fn run() {
         .setup(|app| {
             // The updater plugin fails to initialize without `plugins.updater` (it is only merged in by
             // tauri.updater.conf.json once a key is registered), so register it only when configured.
-            // Without it the frontend's check() rejects and is ignored.
-            if app.config().plugins.0.contains_key("updater") {
+            // Without it `updater_enabled` is false and the frontend hides the update icon.
+            if updater_configured(app.handle()) {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             }
             // Start in the background so the window appears immediately; a failure never aborts startup.
@@ -277,7 +288,7 @@ pub fn run() {
             std::thread::spawn(move || start_sidecar(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![sidecar_info, get_path_settings, save_path_settings, restart_sidecar])
+        .invoke_handler(tauri::generate_handler![sidecar_info, get_path_settings, save_path_settings, restart_sidecar, updater_enabled])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
