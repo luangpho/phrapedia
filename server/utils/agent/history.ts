@@ -1,79 +1,53 @@
-import type Anthropic from '@anthropic-ai/sdk'
 import type { ChatMessage, ChatPart } from '../../../shared/types/chat'
 
-/** Text of a tool part's output as stored in the history (truncated in the event already). */
-export function toolOutputText(output: unknown): string {
-  if (output === undefined || output === null) return ''
-  if (typeof output === 'string') return output
-  try {
-    return JSON.stringify(output)
-  } catch {
-    return String(output)
-  }
+const PART_LIMIT = 1_500
+const TOTAL_LIMIT = 24_000
+
+function clip(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit)}…(省略)` : text
 }
 
-function draftNote(part: Extract<ChatPart, { type: 'draft' }>): string {
-  return `（update_draft で下書きを更新しました${part.summary ? `: ${part.summary}` : ''}）`
+function partText(part: ChatPart): string {
+  if (part.type === 'text') return part.text.trim()
+  if (part.type === 'draft') return `（update_draft で下書きを更新しました${part.summary ? `: ${part.summary}` : ''}）`
+  return `（ツール ${part.name} を実行）`
 }
 
 /**
- * Convert stored ChatMessages into Anthropic MessageParams that form a valid history:
- *  - text parts → text blocks
- *  - tool parts → assistant tool_use block, followed by a user message holding the matching tool_result
- *  - draft parts → a short text note (the full markdown is already in the system prompt as the current draft)
- * Consecutive same-role messages are allowed by the API (they are merged into one turn).
+ * Plain-text digest of the stored conversation. Used when the Claude Code CLI session cannot be resumed
+ * (other machine, session file gone): the digest is put in front of the prompt so the new session keeps the context.
+ * Older messages are dropped first when the digest gets too long.
  */
-export function toAnthropicMessages(history: ChatMessage[]): Anthropic.MessageParam[] {
-  const out: Anthropic.MessageParam[] = []
-
+export function summarizeHistory(history: ChatMessage[]): string {
+  const lines: string[] = []
   for (const msg of history) {
     if (msg.role === 'system') continue
-    if (msg.role === 'user') {
-      const text = msg.parts
-        .map(p => (p.type === 'text' ? p.text : p.type === 'draft' ? draftNote(p) : ''))
-        .filter(Boolean)
-        .join('\n')
-        .trim()
-      if (text) out.push({ role: 'user', content: text })
-      continue
-    }
-
-    // assistant
-    let blocks: Anthropic.ContentBlockParam[] = []
-    let results: Anthropic.ToolResultBlockParam[] = []
-    const flush = () => {
-      if (blocks.length) out.push({ role: 'assistant', content: blocks })
-      if (results.length) out.push({ role: 'user', content: results })
-      blocks = []
-      results = []
-    }
-    for (const part of msg.parts) {
-      if (part.type === 'tool') {
-        blocks.push({
-          type: 'tool_use',
-          id: part.toolCallId,
-          name: part.name,
-          input: (part.input && typeof part.input === 'object' ? part.input : {}) as Record<string, unknown>,
-        })
-        const text = part.state === 'done' ? toolOutputText(part.output) : '（中断されました）'
-        results.push({
-          type: 'tool_result',
-          tool_use_id: part.toolCallId,
-          content: text || '(empty)',
-          ...(part.isError || part.state !== 'done' ? { is_error: true } : {}),
-        })
-        continue
-      }
-      // a text/draft part after tool calls starts a new assistant message (after the tool results)
-      if (results.length) flush()
-      const text = part.type === 'text' ? part.text : draftNote(part)
-      if (text.trim()) blocks.push({ type: 'text', text })
-    }
-    flush()
+    const text = msg.parts.map(partText).filter(Boolean).join('\n').trim()
+    if (!text) continue
+    lines.push(`${msg.role === 'user' ? 'ユーザー' : 'アシスタント'}: ${clip(text, PART_LIMIT)}`)
   }
-
-  // The API requires the conversation to start with a user turn.
-  while (out.length && out[0]!.role !== 'user') out.shift()
-  return out
+  let total = 0
+  const kept: string[] = []
+  for (let i = lines.length - 1; i >= 0; i--) {
+    total += lines[i]!.length + 1
+    if (total > TOTAL_LIMIT) break
+    kept.unshift(lines[i]!)
+  }
+  return kept.join('\n')
 }
 
+/** Prompt for a fresh CLI session that continues an existing conversation. */
+export function withHistoryDigest(prompt: string, history: ChatMessage[]): string {
+  const digest = summarizeHistory(history)
+  if (!digest) return prompt
+  return [
+    '以下は、この会話のこれまでのやり取りの記録です（別のセッションから引き継いだ文脈。内容は既に実行済みで、再実行は不要です）。',
+    '<conversation_so_far>',
+    digest,
+    '</conversation_so_far>',
+    '',
+    '上記を踏まえて、次のユーザーの発言に答えてください。',
+    '',
+    prompt,
+  ].join('\n')
+}
