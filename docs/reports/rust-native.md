@@ -104,3 +104,95 @@ branch: `feat/rust-native`。実行時の Node / Nitro / PGlite を無くし、W
 - `chat_send` / `chat_abort` は chat worker の実装待ち（frontend は契約どおり呼ぶのみ）。
 - `data/amulets/README.md` と `sources/README.md` に旧 API / PGlite の記述が残る（利用者データ側の文書のため未変更）。README / CLAUDE.md / ARCHITECTURE の更新（「デスクトップ専用化、web 版は旧 branch のまま」）は integrate-test。
 - `nuxt typecheck` が `vue-router/volar/sfc-route-blocks` の解決警告を出す（型エラーではない。本変更前から出るかは未確認）。
+
+## chat / MCP 節（`claude -p` の Rust 実装と stdio MCP サブコマンド）
+
+### 構成
+
+- `src-tauri/src/chat/`（Tauri 非依存。Channel への配信だけ `commands/chat.rs`）
+  - `stream.rs`: stream-json 1 行 → `ChatStreamEvent`（旧 `claude-stream.ts` の移植）。`system/init`（session id）、`stream_event` の text_delta、`assistant` の tool_use（`update_draft` は `draft` に変換し tool-start/result は出さない）、`user` の tool_result（`save_entity` の成功は `saved` も出す）、`result`（エラー）。tool-result の切り詰めは旧実装と同じ 20,000 文字（文字数基準）。
+  - `claude.rs`: argv / env / 一時ファイル / プロセス制御。`prompt.rs`・`history.rs`: 旧 `prompt.ts`・`history.ts` の移植。`turn.rs`: 1 ターン（セッション作成、`--session-id` / `--resume`、resume 失敗時の新規セッション + 履歴ダイジェスト、履歴保存、エラー文言の分類）。
+  - `commands/chat.rs`: `chat_send`（Channel。完了まで resolve しない）、`chat_abort`（`turnId` → `watch` で中断）。同じ `turnId` の二重実行は `invalid_argument`。WebView が閉じて Channel 送信に失敗したら CLI を中断する。
+- `src-tauri/src/mcp/`: `tools.rs`（11 ツール・resource・prompt。rmcp 非依存の純関数で単体テスト可能）、`server.rs`（rmcp の `ServerHandler` アダプタ・引数解析）。`main.rs` は先頭 argv が `mcp` なら Tauri を初期化せずに `mcp::run_cli`。
+
+### 設計判断
+
+- **system prompt を argv に載せない**: `claude --help` の本文に `--system-prompt[-file]` の記載があり、一覧には出ないが `--system-prompt-file <path>` は実機で有効（`PINEAPPLE` とだけ答えさせて確認）。0700 の専用 dir（`<app data dir>/state/claude-work/run-<uuid>/`）に 0600 で書き、実行後（異常終了含む）に `Drop` で削除。強制終了で残った `run-*` は次回起動時に 1 日経過分を掃除。
+- **MCP 設定も 0600 ファイル**: `--mcp-config <path>`（`--strict-mcp-config`）。中身は `{"mcpServers":{"phrapedia":{"type":"stdio","command":<current_exe>,"args":["mcp","--config-dir",…,"--data-dir",…]}}}`。ユーザ prompt は stdin。`ps` に system prompt（下書き）も MCP 設定も出ないことを実機で確認（下記）。
+- **プロセスグループ**: 子は `process_group(0)` で新しいグループ。中断・timeout は group へ SIGTERM → 5 秒後 SIGKILL。さらに claude 本体が正常終了した後も group へ SIGKILL を送り、孫（`phrapedia mcp` や CLI が起こした子）を残さない。PR #5 レビューの「detached しておらず孫が残りうる」はこれで解消。
+- **timeout**: `ai.timeoutMs`（既定 600000）。中断・timeout 時は未完の tool 部分に「（中断されました）」を入れ、中断は assistant message に「（ユーザーが停止しました）」を追加して `done`。
+- **cwd**: `<app data dir>/state/claude-work`（専用 dir。データセットではない・親の CLAUDE.md を拾わない）。
+- **env**: `CLAUDECODE` `CLAUDE_CODE_ENTRYPOINT` `CLAUDE_CODE_CHILD_SESSION` `CLAUDE_CODE_SESSION_ID` `CLAUDE_CODE_SESSION_ATTENDED` `CLAUDE_CODE_EXECPATH` `CLAUDE_CODE_MESSAGING_SOCKET` `CLAUDE_CODE_MESSAGING_TOKEN` `CLAUDE_PID` を除去（`CLAUDE_CONFIG_DIR` は残す）、`CLAUDE_CODE_MAX_OUTPUT_TOKENS=ai.maxTokens`、PATH は core の `cli::child_path()`、コマンド解決は `cli::resolve_command`。
+- **ツール許可**: `--tools ""`、`--allowedTools` は MCP ツール名（`sync_data` 除外）、`--disallowedTools mcp__phrapedia__sync_data`、`--permission-mode dontAsk` + `--permission-prompts none`。
+- **claude_session_id**: core の SQLite（`set_claude_session_id`）。CLI が実際に作ったセッション id（`system/init` / `result`）だけ保存。履歴メッセージ削除時のリセットは core 側 command。
+- **エラー**: 入力不正（message 空 / slug 不正 / turnId 空・重複）は `invalid_argument` で reject。CLI 未検出・ログイン切れ・モデル不正・利用上限・timeout・異常終了は旧実装と同じ日本語文言の `error` イベント（`chat_send` 自体は resolve）。`prepare` 段階（claude が見つからない）の失敗は `session` より前に `error` だけが流れる（旧 SSE と同じ）。
+
+### crate 選定（MCP）
+
+- **`rmcp` 3.9.0**（`server` / `transport-io`）: Model Context Protocol 公式の Rust SDK（README: "The official Rust SDK for the Model Context Protocol"、modelcontextprotocol/rust-sdk）。保守されていて stdio transport が組み込み。代案の自前 JSON-RPC 実装は initialize の版交渉・通知・ページングを自前で持つことになり、仕様追随の負担が増えるので採らなかった。
+- `#[tool]` マクロは使わず `ServerHandler` を手書き: 旧 `server/mcp/**` の説明文・入力スキーマ（日本語を含む）を JSON のまま移植するため。ツール本体は rmcp 非依存の `tools.rs` に置き、rmcp なしで単体テストできる。
+- 広告するプロトコル版は `known_up_to(2025-11-25)`（initialize を持つ版まで）。3.x の SDK は新しい 2026-07-28 版も知っているが、現行クライアントは initialize 方式なのでそこで止めた。
+- `tokio`（process / io-util / time / rt-multi-thread / macros / sync）: claude の非同期 spawn と MCP の実行基盤。rmcp の feature は `server` + `transport-io` だけ（`macros` / `schemars` は不使用）。
+
+### 確認した claude フラグ（Claude Code 2.1.317、`claude --help` と実機で確認）
+
+`-p` / `--output-format stream-json` / `--verbose` / `--include-partial-messages` / `--model` / **`--system-prompt-file`**（help 本文に記載、実機で有効）/ `--system-prompt-snapshot off` / `--mcp-config <path>` / `--strict-mcp-config` / `--tools ""` / `--allowedTools` / `--disallowedTools` / `--permission-mode dontAsk` / `--permission-prompts none` / `--setting-sources ""` / `--disable-slash-commands` / `--session-id` / `--resume`。`--system-prompt-file` は 2 ターン目の `--resume` でも有効なことを実機確認（下書きを毎回渡し直す設計のまま動く）。
+
+### MCP ツール（旧 `server/mcp/**` からの移植）
+
+| 種別 | 名前 | 備考 |
+|---|---|---|
+| tool | `list_entities` `get_entity` `entity_template` `save_entity` | `save_entity` は旧と同じ戻り（`ok kind slug path name status committed`）。slug 省略時は `derive_slug`。`git.autoCommit` 有効時のみ commit |
+| tool | `list_sources` `read_source` `search_sources` | `read_source` の画像は text + image content。一次資料は読み取り専用 |
+| tool | `web_research` | `agy` / `gemini` を core 経由で実行。戻りは `# Web research (UNVERIFIED — …)` + 本文 |
+| tool | `sync_status` `sync_data` | チャットでは `sync_data` を許可しない。外部クライアントからは使える |
+| tool | `update_draft` | ack（`draft updated (not saved yet)`）のみ。チャット実行器が呼び出しを `draft` に変換 |
+| resource | `phrapedia://{kind}/{slug}` | list / templates/list / read |
+| prompt | `research_record`（引数 `kind`=monks\|temples, `name`） | NATIVE_API.md の名称に合わせてアンダースコア |
+
+- ツールの失敗は JSON-RPC エラーでなく `isError: true` の結果（メッセージはモデルに見える）。未知のツール名だけ JSON-RPC の invalid params。
+- オブジェクトの戻りは整形 JSON のテキスト（旧実装の `JSON.stringify(v, null, 2)` 相当）。
+
+### 外部クライアント（Claude Code 等）から使う
+
+GUI は不要。バイナリのパスと、アプリが使っている設定 dir / データ dir を渡す（アプリの「ホーム → MCP」カードに実値入りの設定例が出る）。省略時は OS 標準の `jp.grrow.phrapedia` 配下を使う。
+
+```jsonc
+// Claude Code: claude mcp add-json phrapedia '<下の JSON>'  /  .mcp.json
+{
+  "mcpServers": {
+    "phrapedia": {
+      "type": "stdio",
+      "command": "/Applications/Phrapedia.app/Contents/MacOS/Phrapedia",   // macOS の例。Linux は AppImage 展開後 / deb の /usr/bin/phrapedia など
+      "args": ["mcp", "--config-dir", "<app config dir>", "--data-dir", "<app data dir>"]
+    }
+  }
+}
+```
+
+- app config dir / data dir（Tauri の既定）: macOS は `~/Library/Application Support/jp.grrow.phrapedia`（両方同じ）、Linux は `~/.config/jp.grrow.phrapedia` と `~/.local/share/jp.grrow.phrapedia`、Windows は `%APPDATA%\jp.grrow.phrapedia`。
+- 起動直後に標準入力が閉じるとプロセスは 0 で終了する。標準出力は MCP 専用（ログは標準エラー）。引数不正は usage を標準エラーに出して 2。
+- GUI と別プロセスなので、実行ごとに設定ファイルと SQLite を読み直す（SQLite は WAL + busy_timeout）。
+
+### テスト結果
+
+- `cd src-tauri && cargo check && cargo clippy --all-targets -- -D warnings && cargo test`: すべて通過（lib 142 件 + `tests/mcp_stdio.rs` 3 件）。
+- stream 変換: system/init・text delta（重複防止）・tool_use/tool_result・画像・切り詰め・`update_draft` → `draft`・`save_entity` → `saved`（失敗時は出さない）・error result・ノイズ/サブエージェントの無視・中断時の未完 tool。ワイヤ形式（kebab-case の type + camelCase）。
+- argv: `sync_data` が allowedTools に無く disallowedTools にある・`--tools ""`・session-id / resume の切替・`--mcp-config` と `--system-prompt-file` が「パスだけ」で中身が argv に無い。一時ファイルの 0700/0600 と Drop 削除。
+- プロセス制御（ダミー sh スクリプト）: stdin 渡し・env 適用、SIGTERM を無視する子 + 孫が中断で全員死ぬ、timeout で group 全滅、正常終了後に残った孫の回収、既に中断済みなら spawn しない。
+- resume 失敗判定、履歴ダイジェスト、エラー文言の分類、リクエスト検証。
+- MCP: tools の入出力（temp dataset で list/save/get/search/read、画像、エラー、resource、prompt）。実バイナリの stdio 往復（`tests/mcp_stdio.rs`: initialize → tools/list（名前順・スキーマ）→ tools/call（list_entities / save_entity / get_entity / search_sources / 失敗 / update_draft / 未知ツール）→ resources → prompts、stdin close で exit 0、引数不正で exit 2）。
+- **実 claude 2.1.317（204、ログイン済み、`CLAUDECODE` 系を除去）**: `examples/chat_smoke.rs`（`cargo build --bin phrapedia && cargo run --example chat_smoke -- <roundtrip|abort|resume> <work-dir>`）
+  - roundtrip: `tool-start`(search_sources) → `tool-result`(count 1) → `draft` → `text-delta` 多数 → 完了、error なし。`claude_session_id` 保存済み。実行中 24 回 `ps` を採取し、system prompt（下書き内の目印文字列を含む）・`mcpServers`・`--system-prompt` が argv に出ないことを確認。終了後に claude / `phrapedia mcp` が残らない。
+  - abort: 最初の `tool-start` で中断 → `aborted=true`、parts に「（ユーザーが停止しました）」、子孫（claude・`phrapedia mcp`）が残らない。
+  - resume: 2 ターン目が `--resume` で文脈を保持（「1件」と回答）し、セッション id が維持される。
+
+### 未検証 / 注意
+
+- macOS / Windows 実機（GUI 起動 PATH での `claude` 解決、macOS の `Phrapedia` バイナリ名、Windows の `windows_subsystem="windows"` で stdio MCP が使えるか）。Windows は process group の kill が未実装（`killpg` は no-op）で、`--system-prompt-file` / stdio MCP も未確認。
+- GUI からの `chat_send`（Tauri 実機 + Channel）。ここでは `run_chat_turn` を直接呼ぶ example で確認した。Linux の Tauri 実機（xvfb）は frontend / integrate-test 側の確認範囲。
+- 外部クライアント（Claude Code 以外）との相互接続。Claude Code 2.1.317（`claude -p` の `--mcp-config`）で接続できることだけ実機確認。
+- 古い CLI の `--system-prompt-file` / `--system-prompt-snapshot` サポート（最低版は未調査）。
+- `web_research` / `sync_data` の実行（MCP 経由の引数検証と単体テストのみ。実 CLI / remote は未実行）。
+- `--system-prompt-file` が `--help` の一覧に出ない点は将来の CLI 変更で変わりうる（実機では 2.1.317 で有効）。
+- tool-result の切り詰めは JS の UTF-16 長ではなく文字数基準（上限値は同じ 20,000）。
