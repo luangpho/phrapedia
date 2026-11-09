@@ -78,7 +78,7 @@ jobs:
       - name: Export updater signing env
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           set -euo pipefail
           pubkey="$(node -p "require('./src-tauri/tauri.updater.conf.json').plugins.updater.pubkey || ''")"
@@ -94,7 +94,7 @@ jobs:
             printf '%s\n' "${TAURI_SIGNING_PRIVATE_KEY}"
             printf '%s\n' "${delim}"
             printf 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD<<%s\n' "${delim}"
-            printf '%s\n' "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+            printf '%s\n' "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
             printf '%s\n' "${delim}"
           } >> "${GITHUB_ENV}"
           echo "updater 署名を有効化してビルド"
