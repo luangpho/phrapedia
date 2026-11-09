@@ -2,6 +2,8 @@
 //! The contract (names, arguments, return values, errors) is documented in docs/NATIVE_API.md.
 //! Every command runs on the blocking pool; errors are `AppError` (`{ code, message, detail? }`).
 
+pub mod chat;
+
 use crate::core::entities::{assert_kind, assert_slug, entity_template as make_template, WriteOptions};
 use crate::core::error::{AppError, Result};
 use crate::core::frontmatter;

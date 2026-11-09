@@ -1,5 +1,7 @@
+pub mod chat;
 pub mod commands;
 pub mod core;
+pub mod mcp;
 
 use crate::core::{AppDirs, Core};
 use std::sync::Arc;
@@ -29,6 +31,7 @@ pub fn run() {
             }
             let dirs = AppDirs { config_dir: app.path().app_config_dir()?, data_dir: app.path().app_data_dir()? };
             app.manage(Arc::new(Core::new(dirs)));
+            app.manage(commands::chat::ChatTurns::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -59,6 +62,8 @@ pub fn run() {
             commands::delete_chat_session,
             commands::patch_chat_session,
             commands::delete_chat_messages,
+            commands::chat::chat_send,
+            commands::chat::chat_abort,
             updater_enabled,
         ])
         .run(tauri::generate_context!())
