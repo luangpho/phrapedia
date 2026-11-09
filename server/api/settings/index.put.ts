@@ -9,9 +9,12 @@ const SettingsPatch = z.object({
   sourcesDir: nonEmpty.optional(),
   dataDir: nonEmpty.optional(),
   ai: z.object({
-    anthropicModel: nonEmpty.max(100).optional(),
+    model: nonEmpty.max(100).optional(),
     maxTokens: z.number().int().min(256).max(128_000).optional(),
     extraInstructions: z.string().max(20_000).optional(),
+    command: nonEmpty.optional(),
+    args: z.array(z.string().max(1000)).max(50).optional(),
+    timeoutMs: z.number().int().min(1000).max(3_600_000).optional(),
   }).strict().optional(),
   gemini: z.object({
     engine: z.enum(['antigravity', 'gemini-cli']).optional(),

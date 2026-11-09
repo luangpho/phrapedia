@@ -42,6 +42,23 @@ pub fn find_node() -> Result<PathBuf, String> {
     find_in(&dirs, exe).ok_or_else(|| "node が見つかりません。Node.js 22 以上をインストールしてください（macOS: brew install node）".to_string())
 }
 
+/// PATH handed to the sidecar: the inherited one plus the usual locations of Homebrew / user-local CLIs
+/// (`claude`, and the `node` it may need). GUI apps on macOS start with a minimal PATH, so the chat's
+/// `claude -p` would not be found otherwise. Directories already present are not added again.
+pub fn sidecar_path(inherited: Option<std::ffi::OsString>, home: Option<PathBuf>) -> std::ffi::OsString {
+    let mut dirs: Vec<PathBuf> = inherited.map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    let mut extra = vec![PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/local/bin")];
+    if let Some(h) = home {
+        extra.push(h.join(".local").join("bin"));
+    }
+    for dir in extra {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    std::env::join_paths(dirs).unwrap_or_default()
+}
+
 fn find_in(dirs: &[PathBuf], exe: &str) -> Option<PathBuf> {
     dirs.iter().map(|d| d.join(exe)).find(|c| c.is_file())
 }
@@ -78,6 +95,7 @@ impl Sidecar {
             .env("PHRAPEDIA_ALLOWED_ORIGINS", &cfg.allowed_origins)
             .env("PHRAPEDIA_PARENT_PID", std::process::id().to_string())
             .env("NUXT_STATE_DIR", &cfg.state_dir)
+            .env("PATH", sidecar_path(std::env::var_os("PATH"), std::env::var_os("HOME").map(PathBuf::from)))
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(log_err));
@@ -303,6 +321,27 @@ http.createServer((req, res) => res.end(JSON.stringify({
         std::fs::write(b.join("node"), "").unwrap();
         assert_eq!(find_in(&[a, b.clone()], "node"), Some(b.join("node")));
         assert_eq!(find_in(&[], "node"), None);
+    }
+
+    #[test]
+    fn sidecar_path_appends_missing_dirs_only() {
+        let p = sidecar_path(Some("/usr/bin:/opt/homebrew/bin".into()), Some(PathBuf::from("/Users/u")));
+        let dirs: Vec<PathBuf> = std::env::split_paths(&p).collect();
+        assert_eq!(
+            dirs,
+            vec![
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/Users/u/.local/bin"),
+            ]
+        );
+        // already complete: unchanged
+        let again = sidecar_path(Some(p.clone()), Some(PathBuf::from("/Users/u")));
+        assert_eq!(again, p);
+        // no PATH at all
+        let none: Vec<PathBuf> = std::env::split_paths(&sidecar_path(None, None)).collect();
+        assert_eq!(none, vec![PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/local/bin")]);
     }
 
     #[test]

@@ -8,5 +8,7 @@ export default defineEventHandler(async (event) => {
   const session = await getChatSession(id)
   if (!session) throw createError({ statusCode: 404, statusMessage: 'Not found', message: `Chat session not found: ${id}` })
   const deleted = await deleteChatMessages(id, ids)
+  // The CLI session still remembers the removed turns: start a fresh one (history is re-sent as a summary).
+  if (deleted > 0) await setClaudeSessionId(id, null)
   return { ok: true, deleted }
 })

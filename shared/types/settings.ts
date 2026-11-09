@@ -3,12 +3,18 @@ export interface AppSettings {
   sourcesDir: string
   /** Directory holding records (data/<kind>/<slug>.md). Absolute, or relative to the project root. */
   dataDir: string
-  /** Chat assistant — always Anthropic Claude. Gemini is used only by the web_research tool. */
+  /** Chat assistant — always Claude, run through the Claude Code CLI (`claude -p`). Gemini is used only by the web_research tool. */
   ai: {
-    anthropicModel: string
+    model: string
     maxTokens: number
     /** Extra instructions appended to the system prompt (user-editable) */
     extraInstructions: string
+    /** Executable name or absolute path of the Claude Code CLI */
+    command: string
+    /** Extra CLI arguments inserted before the generated ones (e.g. ["--effort", "low"]) */
+    args: string[]
+    /** Kill the CLI when one chat turn takes longer than this */
+    timeoutMs: number
   }
   gemini: {
     /**
@@ -43,9 +49,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sourcesDir: 'sources',
   dataDir: 'data',
   ai: {
-    anthropicModel: 'claude-sonnet-5-5',
+    model: 'claude-sonnet-5-5',
     maxTokens: 8192,
     extraInstructions: '',
+    command: 'claude',
+    args: [],
+    timeoutMs: 600_000,
   },
   gemini: {
     engine: 'antigravity',
@@ -73,7 +82,9 @@ export interface SettingsView extends AppSettings {
     projectRoot: string
   }
   capabilities: {
-    anthropicConfigured: boolean
+    /** `claude --version` ran successfully */
+    claudeFound: boolean
+    claudeVersion?: string
     geminiFound: boolean
     geminiVersion?: string
     /** Human label of the configured research CLI, e.g. "Antigravity CLI (agy)" */

@@ -12,7 +12,7 @@
 | アプリ状態 DB | PGlite（埋め込み Postgres, `.phrapedia/pglite/`）— 設定・チャット履歴・一次資料インデックス・Web調査キャッシュ |
 | 一次情報 | `sources/`（設定で変更可）配下の Markdown / 画像。**最優先・確定情報**として扱う |
 | Web 調査 | Google の CLI を `child_process` で呼び出す。既定は **Antigravity CLI**（`agy --output-format json -p ...`。2026-06 に無料枠/Google One の Gemini CLI を置き換え）、旧 **Gemini CLI**（`gemini`、プロンプトは stdin）も選択可。結果は常に「未確認」扱い |
-| チャット AI | Anthropic Claude 固定（ツール呼び出しループ, SSE ストリーミング）。Gemini は `web_research` ツール経由のインターネット検索にのみ関与し、チャット自体は担わない |
+| チャット AI | Claude 固定。Claude Code CLI を子プロセス `claude -p`（stream-json）で実行し、ユーザの `claude` ログインで動く（API キー不要）。サーバは出力を SSE に変換する。Gemini は `web_research` ツール経由のインターネット検索にのみ関与し、チャット自体は担わない |
 | 同期 | `simple-git` で `data/` をコミット → `pull --rebase` → `push`（GitHub） |
 
 ## ディレクトリ
@@ -25,7 +25,7 @@ app/                      Nuxt アプリ（pages, components, composables, layou
   composables/useEntities.ts / useChat.ts / useSettings.ts / useSync.ts
 shared/types/             app / server 共通の型（EntityKind, EntityRecord, AppSettings, ChatStreamEvent, SyncStatus ...）
 shared/utils/slug.ts      slug 生成
-server/utils/             paths, db(PGlite), settings, frontmatter, entities, sources, gemini, git, mcp-bridge
+server/utils/             paths, db(PGlite), settings, frontmatter, entities, sources, gemini, git, mcp-bridge, agent/(claude-cli, claude-stream)
 server/mcp/tools/         MCP ツール（list_entities, get_entity, save_entity, entity_template, list_sources,
                           search_sources, read_source, web_research, sync_status, sync_data）
 server/mcp/resources/     phrapedia://{kind}/{slug} リソース
@@ -96,13 +96,20 @@ updated_at: 2026-11-05T00:00:00.000Z
 ## チャット AI の設計
 
 1. ブラウザは `POST /api/chat` に `{ sessionId?, kind, slug, message, draft }` を送る。`draft` はエディタの現在の Markdown 全文。
-2. サーバは `createMcpBridge()` で MCP ツールをインプロセス接続し、ツール定義（JSON Schema）を LLM に渡す。
-   さらにチャット専用ツール `update_draft({ markdown, summary })` を追加する。LLM がこれを呼ぶとサーバは
+2. サーバは `claude -p` を子プロセスとして起動する（`server/utils/agent/claude-cli.ts`）。プロンプト（ユーザ発話）は stdin、システムプロンプト（`buildSystemPrompt`）は `--system-prompt`、
+   ツールは `--mcp-config` で渡した **自分自身の `/mcp`**（`http://127.0.0.1:<受け付けたソケットのポート>/mcp`。Tauri はポートが動的。Basic 認証有効時は `Authorization` ヘッダ付き）。
+   組み込みツールは `--tools ""` で無効、`--allowedTools` は MCP ツール名の列挙（`sync_data` を含めない。`--disallowedTools` でも deny）、`--permission-mode dontAsk --permission-prompts none` で承認待ちを作らない。
+   ユーザ個人の Claude Code 設定（hooks / plugin / skills）がチャットに混ざらないよう `--setting-sources ""` `--disable-slash-commands`。作業ディレクトリは `os.tmpdir()` 配下の専用空ディレクトリ。
+   チャット専用ツール `update_draft({ markdown, summary })` は MCP ツール（`server/mcp/tools/update-draft.ts`、戻りは ack のみ）。サーバは stream-json の `tool_use`（`mcp__phrapedia__update_draft`）を見て
    `{ type: 'draft', markdown }` イベントを流し、ブラウザのエディタが更新される（ファイルは保存しない。保存はユーザーの操作）。
 3. システムプロンプトの原則: 一次資料（search_sources / read_source）を最優先 → 不足分のみ web_research（Gemini）→
    Web 由来は「未確認」と明記 → 出典セクションに一次資料パスと URL を分けて書く → 高僧の追加では高僧中心、寺院の追加では寺院中心。
-4. ストリーミングは h3 `createEventStream(event)` の SSE。イベント型は `shared/types/chat.ts` の `ChatStreamEvent`。
-5. 履歴は PGlite（chat_sessions / chat_messages）に保存（`server/utils/chat-store.ts`: createChatSession / listChatSessions / appendChatMessage ...）。セッションは (kind, slug) に紐づき、slug が null の下書きセッションはブラウザの localStorage で記憶され、保存後に PATCH で slug へ付け替えられる。
+4. ストリーミングは h3 `createEventStream(event)` の SSE。イベント型は `shared/types/chat.ts` の `ChatStreamEvent`。CLI の stdout（`--output-format stream-json --verbose --include-partial-messages`）を 1 行ずつ `ClaudeStreamParser`（`claude-stream.ts`）で変換する:
+   `stream_event` の text_delta → `text-delta` / `assistant` の `tool_use` → `tool-start`（update_draft は `draft`）/ `user` の `tool_result` → `tool-result`（20,000 文字で切り詰め。save_entity 成功時は `saved`）/ `result` の失敗 → `error`。
+   接続の中断（SSE close）は `AbortSignal` で子プロセスへ SIGTERM（5 秒後 SIGKILL）。応答のタイムアウトは `ai.timeoutMs`。子プロセスの env は継承し、`CLAUDECODE` 等「Claude Code 内」を示す変数は除去、`CLAUDE_CODE_MAX_OUTPUT_TOKENS` に `ai.maxTokens` を渡す。
+5. セッション継続: `chat_sessions.claude_session_id` に CLI のセッション ID を保持し、初回は `--session-id <uuid v4>`、2 回目以降は `--resume <id>`。システムプロンプトにエディタの最新下書きを含めるため `--system-prompt-snapshot off`（既定の on だと resume 時に初回のプロンプトが固定される）。
+   resume に失敗した時（別マシン・セッションファイル消失: `No conversation found`）は新しいセッションで再実行し、PGlite の履歴をテキストの要約（`history.ts`）としてプロンプト先頭に添える。会話のメッセージ削除（リトライ）時は ID をリセットする。
+   履歴は PGlite（chat_sessions / chat_messages）に保存（`server/utils/chat-store.ts`: createChatSession / listChatSessions / appendChatMessage ...）。セッションは (kind, slug) に紐づき、slug が null の下書きセッションはブラウザの localStorage で記憶され、保存後に PATCH で slug へ付け替えられる。
 6. 役割分担: Claude が会話・一次資料の読解・下書きの執筆を担い、Web からの情報収集だけを `web_research`（Gemini）に委ねる。Gemini の出力は検索結果の要約＋出典 URL で、レコード本文は Claude が書く。
 7. 画像を対象にした指示（「この画像の〜」）: Claude は `read_source` で画像を確認して文字を読み取り、`web_research` に `images`（一次資料の画像パス）と `ocrText`（自分の読み取り結果＝参考情報）を渡す。
    `server/utils/gemini.ts` は画像を実行ごとの作業ディレクトリ（`.phrapedia/gemini-work/run-*`）にコピーし、その中で CLI を起動する（Gemini CLI は `@image-1.jpg` 構文で画像をプロンプトに埋め込み、Antigravity CLI はファイル読み取りツールで開く）。

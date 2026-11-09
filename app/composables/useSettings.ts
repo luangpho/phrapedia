@@ -5,7 +5,7 @@ export function toAppSettings(v: AppSettings | SettingsView): AppSettings {
   return {
     sourcesDir: v.sourcesDir,
     dataDir: v.dataDir,
-    ai: { ...v.ai },
+    ai: { ...v.ai, args: [...(v.ai.args ?? [])] },
     gemini: { ...v.gemini, args: [...(v.gemini.args ?? [])] },
     git: { ...v.git },
   }

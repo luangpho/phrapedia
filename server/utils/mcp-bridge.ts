@@ -38,6 +38,12 @@ export async function createMcpBridge(opts: { exclude?: string[] } = {}): Promis
   }
 }
 
+/** Names of the MCP tools defined in server/mcp/tools (what /mcp exposes), minus `exclude`. */
+export async function listMcpToolNames(opts: { exclude?: string[] } = {}): Promise<string[]> {
+  const defs = await getMcpTools()
+  return defs.map(d => d.name ?? '').filter(n => n && !opts.exclude?.includes(n))
+}
+
 /** Flatten a CallToolResult into plain text (and collect images) for LLM consumption / UI display. */
 export function toolResultText(result: CallToolResult): { text: string; images: { data: string; mimeType: string }[]; isError: boolean } {
   const parts: string[] = []
