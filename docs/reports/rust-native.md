@@ -68,3 +68,39 @@ branch: `feat/rust-native`。実行時の Node / Nitro / PGlite を無くし、W
 - `npm run tauri:build`（frontend が API 層に置換するまで旧 Nuxt のままなので対象外）。
 - 大きな dataset での index / 検索の性能。
 - Windows（`#[cfg(unix)]` の process group kill 以外は未確認）。
+
+## frontend 節（Nuxt を SPA 静的生成専用に）
+
+### 置換方針
+
+- `app/utils/api.ts` が唯一のバックエンド窓口。`api.<command>()`（`invoke` の薄いラッパ）、`chatSend()`（`Channel` を包み `ChatStreamEvent` をそのまま渡す）、`sourceBlobUrl()`（`read_source_bytes` → Blob URL、パス単位でキャッシュ）を提供。Nuxt の auto-import に依存しないので vitest（Node）でそのままテストできる。
+- エラーは `AppError` JSON を `ApiError`（`code` / `message` / `detail` + `statusCode`: not_found=404, invalid_argument=400, conflict・path_unusable=409）に変換。`errorMessage()`（`utils/entity.ts`）は `message` を取り出す。
+- ブラウザ単体（`__TAURI_INTERNALS__` 無し）は import 時に例外を出さず、各 call が `code: 'desktop_only'` の「この機能はデスクトップアプリ専用です。…」で reject。各画面は既存のエラー表示にそのまま出る。
+- データ取得は `useFetch` → `useAsyncData`（key は従来のまま: `entities:<kind>` / `entity:<kind>:<slug>` / `sync-status` / `settings` / `sources` ほか）。`refreshNuxtData` / `clearNuxtData` の呼び出しは変更なし。
+- チャット: `useChat` は `chat_send` に `turnId`（クライアント採番 UUID）+ Channel を渡す。`stop()` は `chat_abort` を呼び、バックエンドの `done`（停止メッセージ）を受けて終了。`reset()` / 記録切替 / unmount は `chat_abort` + Channel の handler を無効化（遅れて届くイベントを無視）。SSE パーサは削除。`applyChatStreamEvent` は不変。
+- 一次資料の画像 / PDF: markdown 内の相対パスは `#phra-src/<path>` のマーカー href に書き換え、`MarkdownView` が描画後に `read_source_bytes` → Blob URL へ差し替える（asset protocol は不使用）。`SourcesPreview` も同様。
+- デスクトップ層: `sidecar_info` / `setApiBase` / `window.fetch` の差し替え / `restart_sidecar` を廃止（`api-base.ts` 削除）。プラグインは `app_info` を読むだけ。`DesktopBanner` の「再試行」は `app_info` の再読込、`PathsCard` は「保存して再起動」→「保存」（トーストも更新）。
+- 画面: ホームの「MCP エンドポイント」カード（HTTP `/mcp` の URL 表示）を削除（HTTP MCP が無いため）。それ以外の画面・文言は維持。
+- `shared/types`: `SettingsView.resolved.projectRoot` → `datasetRoot` / `exportRoot`、`ChatRequest.turnId` を追加。
+
+### 削除物
+
+- `server/**` 全部（api / middleware / plugins / utils / mcp）、`scripts/smoke.mjs`、`.env.example`、`app/utils/api-base.ts`。
+- 依存: `@electric-sql/pglite` `@nuxtjs/mcp-toolkit` `simple-git` `gray-matter` `yaml` `zod`、devDependency `ai`（`@nuxt/ui` の optional peer で app 側は未使用）。lockfile は `npm install` で再生成。
+- scripts: `build` `preview` `start` `start:render` `smoke` `generate:tauri` `dev:tauri` を廃止。`dev` = `nuxt dev --port 1420`、`generate` = `nuxt generate`、`tauri:dev` = `tauri dev`、`tauri:build` は従来どおり。
+- `nuxt.config.ts`: `ssr:false` 固定、`PHRAPEDIA_TAURI` 分岐 / `mcp` / `runtimeConfig` のサーバ項目 / nitro externals / vite の pglite 設定を削除。出力先 `.output-frontend` は維持（`frontendDist` 不変）。`@nuxt/icon` は `provider:'none'`・`serverBundle:false`・`fallbackToApi:false`（client bundle のみ。旧 sidecar の icon API には依存しない）。
+- `tauri.conf.json`: `beforeDevCommand=npm run dev` / `beforeBuildCommand=npm run generate`、CSP から `http://127.0.0.1:*` を除き `frame-src blob:` を追加（PDF の iframe 用）。identifier / productName / version / updater は不変。
+- tests: server 依存の 10 ファイル（entities / frontmatter / gemini / path-validation / settings / layout / claude-cli / claude-stream / chat-turn / setup）を削除（Rust 側テストが対応）。
+
+### テスト結果
+
+- `npm ci`・`npm test`（6 ファイル / 83 件）・`npm run typecheck`・`npx nuxt generate`: 通過。
+- 追加: `tests/api.test.ts`（全 command の名前と引数、AppError 変換、ブラウザ単体の reject、`chat_send` の Channel 中継 / detach / 入力不正、`read_source_bytes` の Blob 化とキャッシュ）、`tests/chat-events.test.ts`（`applyChatStreamEvent`、一次資料マーカー href）。維持: updater / dialog / slug / update-cask（`isTauriRuntime` の参照元だけ `app/utils/api` に変更）。
+- `cd src-tauri && cargo check && cargo clippy --all-targets -- -D warnings && cargo test`（90 件）: 通過。
+
+### 未検証 / 注意
+
+- 実機 GUI での操作（画像・PDF の表示、`window.open` による Blob URL の「元ファイル」「PDF を開く」「ダウンロード」リンク、WebView 上のアイコン表示、チャットのストリーム表示 / 停止）。いずれも未実施。
+- `chat_send` / `chat_abort` は chat worker の実装待ち（frontend は契約どおり呼ぶのみ）。
+- `data/amulets/README.md` と `sources/README.md` に旧 API / PGlite の記述が残る（利用者データ側の文書のため未変更）。README / CLAUDE.md / ARCHITECTURE の更新（「デスクトップ専用化、web 版は旧 branch のまま」）は integrate-test。
+- `nuxt typecheck` が `vue-router/volar/sfc-route-blocks` の解決警告を出す（型エラーではない。本変更前から出るかは未確認）。
