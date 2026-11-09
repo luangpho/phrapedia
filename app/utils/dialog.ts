@@ -1,4 +1,4 @@
-import { isTauriRuntime } from '../composables/useDesktop'
+import { isTauriRuntime } from './api'
 
 export interface ConfirmDialogOptions {
   title?: string

@@ -8,7 +8,7 @@ const invoke = vi.fn()
 const getVersion = vi.fn()
 const pluginImported = vi.fn()
 
-vi.mock('../app/composables/useDesktop', () => ({ isTauriRuntime: () => isTauriRuntime() }))
+vi.mock('../app/utils/api', () => ({ isTauriRuntime: () => isTauriRuntime() }))
 vi.mock('@tauri-apps/plugin-updater', () => { pluginImported('updater'); return { check: (...a: unknown[]) => check(...a) } })
 vi.mock('@tauri-apps/plugin-process', () => { pluginImported('process'); return { relaunch: () => relaunch() } })
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: (...a: unknown[]) => ask(...a) }))
