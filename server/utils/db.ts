@@ -54,6 +54,10 @@ const MIGRATIONS: { id: number; sql: string }[] = [
       );
     `,
   },
+  {
+    id: 2,
+    sql: `ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS claude_session_id TEXT;`,
+  },
 ]
 
 type DbGlobal = typeof globalThis & { __phrapediaDb?: Promise<PGlite> }
