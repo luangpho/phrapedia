@@ -53,3 +53,42 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 - 報告のみ（未変更）: 「署名・notarization の設定」節末尾に「右クリック → 開く」/ xattr の案内がある。cask 経由でない dmg 直接導入向けなので残した。
 - 上の「残課題」のうち updater 鍵の項は解消済み。`latest.json` に両 platform が載るかは、初回 release 後に要確認のまま（max-parallel: 1 で競合は回避済みの想定）。
 - テスト: `npm ci && npm test` 63 passed、`npm run typecheck` 終了コード 0。ruby / actionlint は手元に無く省略。
+
+## レビュー (review worker)
+
+対象: PR #3（`fix/dist-like-bantou` → `claude/thai-monks-temples-db-6j0hoy`）、commit 0886e62 / 8538f56 / 90b7d27 / a882ab1。bantou（`packages/desktop`）と比較した。
+
+### 指摘一覧
+| # | severity | 内容 | 修正 |
+|---|---|---|---|
+| 1 | high | 更新確認ダイアログが `window.confirm` だった。wry の WKUIDelegate は JS confirm panel を実装しておらず（wry 0.57.1 のソースで確認）、macOS の WKWebView では Cancel 扱いになり、更新があっても黙って何も起きない恐れがある（実機未検証） | 済: `@tauri-apps/plugin-dialog` の `ask` に変更、capabilities に `dialog:allow-message` を追加 |
+| 2 | low | `process:default` は `allow-exit` も含む。必要なのは再起動のみ | 済: `process:allow-restart` に絞り、Rust の設定テストも更新 |
+| 3 | medium | `latest.json` の競合（下記）。matrix 2 本が同時完了すると片方の platform が消えうる | 済（cap が 26ca064 で対策 A `max-parallel: 1` を適用。review worker は適用していない） |
+| 4 | info | 既存の `app/pages/[kind]/[slug].vue:41` と `app/utils/unsaved.ts:16` も `window.confirm`。#1 と同じ理由で macOS では常に Cancel 扱いになり、未保存の編集を破棄して離れる操作ができない可能性がある（本 PR 範囲外・実機未検証） | 未修正（別件として cap へ） |
+| 5 | info | updater 設定は bantou が本体の `tauri.conf.json` に持つのに対し、こちらは overlay（`tauri.updater.conf.json`）。pubkey が空の間は `createUpdaterArtifacts` も外れるため、鍵無しで release が通る設計として妥当 | 変更なし |
+
+### 要件ごとの確認
+- `signingIdentity "-"`: bantou と同じ（`bundle.macOS.signingIdentity`）。
+- updater 配線: plugin 登録は `plugins.updater` がある時のみ（`app.config().plugins.0.contains_key("updater")`）。設定無しで登録すると plugin の config 読み込みが失敗して起動が止まるため妥当。設定無しの Linux バイナリを xvfb で起動し panic しないことを dist worker が確認済み。`check()` の reject は try/catch で握りつぶす。
+- release.yml: js-yaml で parse（jobs: build, cask）。`Export updater signing env` の run 部を抽出して 4 ケース実行（鍵なし / pubkey なし / 両方なし → `GITHUB_ENV` に何も書かず従来どおり、両方あり → `UPDATER_ENABLED` / `UPDATER_ARGS` / 署名 env を複数行の鍵も壊さず出力）。`Attach .app.tar.gz` の `if: env.UPDATER_ENABLED != 'true'` は妥当: tauri-action は `Phrapedia_<ver>_<arch>.app.tar.gz` を `.sig` 付きで上げる（`utils.ts` の命名と一致）ため、手で tar し直して `--clobber` すると `.sig` と中身が食い違う。cask job は無変更。
+- `scripts/release.sh`: bash 3.2 非互換（mapfile / 連想配列 / `${var,,}` / `&>>` 等）なし。引数検査、変更行数ガード、trap による後始末を確認。bare repo + gh stub で `--dry-run 0.1.1` を実走: rc=0、5 ファイルを 1 commit、`git push --dry-run` のみで bare repo の ref は実行前後で不変、一時 dir は消える。
+- cask: レビュー開始後に dist worker が eb77a75 で `auto_updates true` と `preflight_steps`（`xattr -dr com.apple.quarantine`）を追加した。Homebrew 本体のソース（`Library/Homebrew` の `install_steps.rb`、`docs/Cask-Cookbook.md`）で、`preflight_steps` が現行の正式な stanza であること、`run "xattr", args: [...]` の args 内 `{{staged_path}}` が install 時に展開されること、sandbox が caskroom 配下への書き込みを許可することを確認した。名前を指定した `brew upgrade --cask phrapedia` は auto_updates でも対象になる（`cask/upgrade.rb`）。ただし `preflight_steps` が無い古い Homebrew では cask の読み込みに失敗しうる（導入された版は未確認。`brew update` が前提）。version は 0.1.0 のまま、`update-cask.mjs` のテストが追加されて通る。pubkey は d066264 で公開鍵が設定された（公開鍵のみ）。秘密鍵・token・password の混入なし（パターン検索。release.yml は鍵 password を空文字で明示）。
+- bantou との差: bantou は単一 platform（aarch64）をローカルで署名ビルドして `make-latest-json.sh` で `latest.json` を作り、npm publish と手元アプリの入れ替えまで行う。phrapedia は CI（macOS matrix 2 本）がビルドし、`latest.json` は tauri-action が作る。release.sh はビルドせず版上げ・push・tag・workflow 待ちまで。README は新しい手順に更新済みで、「Homebrew でインストール」節は触っていない。
+
+### latest.json 競合の見解（tauri-action の `src/upload-version-json.ts` を確認）
+- 実在する。各 job の流れは「release の assets を list → 既存 `latest.json` を download → `platforms` を merge → 既存 asset を delete → upload」で、job 間のロックが無い。2 本が近い時刻に走ると、(a) 両方が古い `latest.json` を読んで後勝ちになり、片方の platform が消える（エラーにならず気づけない）、(b) 片方が delete した後に他方が download して 404 で失敗する。(b) は tauri-action 自身が 1 回 retry するが、(a) は retry の対象外。
+- 発生確率: 両 job の完了時刻が近いほど高い。aarch64 と x64（クロスコンパイル）の所要時間は近い見込みで、無視できない。
+- 対策 A（`build` job に `strategy.max-parallel: 1`）: 2 本目は 1 本目の完了後に list するため、必ず 1 本目の `darwin-aarch64` を merge できる。`fail-fast: false` なので 1 本目が失敗しても 2 本目は走る。効果は確実で変更は 1 行。代償は所要時間が直列化で約 2 倍になること。cask job は `needs: build` なので影響しない。
+- 対策 B（後続 job で組む）: build job の tauri-action に `uploadUpdaterJson: false` を渡し、`needs: build` の job が release から 2 つの `.sig` を取得して node で `latest.json`（`darwin-aarch64` / `darwin-x86_64`）を作り、`gh release upload --clobber` する。時間は増えず競合も原理的に無いが、workflow に job と数十行のスクリプトが増え、url / signature の組み立てを自前で保守する。bantou の `make-latest-json.sh` を 2 platform に拡張する形になる。
+- pubkey が設定済みになったため、`TAURI_SIGNING_PRIVATE_KEY` を登録した時点でこの競合は現実のリスクになる。
+- 推奨: 初回は A（最小変更）。時間が問題になったら B。cap の判断で A が 26ca064 で適用された。鍵登録後の最初の release で `latest.json` に 2 platform が載ることを確認すること。
+
+### テスト結果
+- `npm ci` OK / `npm test` 63 passed（rebase 後。cask テスト追加分を含む）/ `npm run typecheck` exit 0（vue-router/volar の解決警告のみ）。
+- `cargo check` / `cargo clippy -- -D warnings` クリーン / `cargo test` 15 passed。
+- `npm run tauri:build`（Linux、修正後）: deb / rpm / AppImage 成功（capabilities の権限名もここで検証される）。
+- actionlint は手元に無く省略。
+
+### 未解決
+- macOS 実機での `ask` ダイアログ表示・アプリ内更新・release.sh（bash 3.2）は未検証。
+- #4 の別件対応。

@@ -318,6 +318,8 @@ mod updater_config_tests {
         let caps: Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
         let perms: Vec<&str> = caps["permissions"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert!(perms.contains(&"updater:default"));
-        assert!(perms.contains(&"process:default"));
+        assert!(perms.contains(&"process:allow-restart"));
+        assert!(perms.contains(&"dialog:allow-message"), "ask() goes through dialog message");
+        assert!(!perms.contains(&"process:default"), "process:default also grants exit");
     }
 }

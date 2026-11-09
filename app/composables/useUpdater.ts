@@ -12,7 +12,9 @@ export function useUpdater() {
       const { check } = await import('@tauri-apps/plugin-updater')
       const update = await check()
       if (!update) return
-      if (!window.confirm(`更新があります（${update.version}）。今すぐ更新して再起動しますか`)) return
+      // window.confirm is not usable here: WKWebView without a UI delegate treats it as Cancel (wry does not implement the panel)
+      const { ask } = await import('@tauri-apps/plugin-dialog')
+      if (!(await ask(`更新があります（${update.version}）。今すぐ更新して再起動しますか`, { title: 'Phrapedia', kind: 'info' }))) return
       await update.downloadAndInstall()
       const { relaunch } = await import('@tauri-apps/plugin-process')
       await relaunch()
