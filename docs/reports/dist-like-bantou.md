@@ -45,3 +45,11 @@ branch: `fix/dist-like-bantou`。目的は `brew install` → 起動、`brew upg
 - release.yml の build job に `strategy.max-parallel: 1` を追加。
 - README「アプリ内更新（tauri updater）の鍵」を実態に合わせて書き直し（鍵は生成・secret 登録済み、pubkey は commit 済み、password 無し、「鍵登録までは無効」の文を削除）。
 - 確認: js-yaml parse と run 部抽出で updater 有効・無効（secret 空 / pubkey 空）の両分岐を再確認。
+
+## レビュー（cask-review）
+
+- 確認: cask は bantou の `packages/desktop/Casks/bantou.rb` と同形（preflight_steps は app の後・zap の前、auto_updates true、arch arm/intel、depends_on formula "node"、zap あり）。pubkey は指定値と完全一致し、base64 decode で minisign public key（key ID 7402570F8B336415）。release.yml は js-yaml で parse でき、PASSWORD は `""` 固定で secret 参照なし。run 部を実行し、鍵あり（`--config` と KEY / 空 PASSWORD を `$GITHUB_ENV` へ）・鍵なし（何も書かない）の両分岐を確認。cask job は a882ab1 から無変更。秘密鍵・token の混入なし。version は 0.1.0 のまま。
+- 指摘: README「更新方法」と「アプリ内更新の鍵の登録」節に、pubkey 未登録・password 前提の古い記述が残っていた。同内容の修正が並行 commit（064dd0e）で先に入っていたため、README はそちらを採用し、現状（鍵は登録済み・パスワード無し・「鍵を作り直す場合」あり・「鍵登録までは無効」の文なし）を確認した。追加の README 変更なし。
+- 報告のみ（未変更）: 「署名・notarization の設定」節末尾に「右クリック → 開く」/ xattr の案内がある。cask 経由でない dmg 直接導入向けなので残した。
+- 上の「残課題」のうち updater 鍵の項は解消済み。`latest.json` に両 platform が載るかは、初回 release 後に要確認のまま（max-parallel: 1 で競合は回避済みの想定）。
+- テスト: `npm ci && npm test` 63 passed、`npm run typecheck` 終了コード 0。ruby / actionlint は手元に無く省略。
