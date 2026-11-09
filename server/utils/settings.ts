@@ -25,7 +25,10 @@ function envDefaults(): AppSettings {
   return deepMerge(DEFAULT_SETTINGS, {
     sourcesDir: cfg.sourcesDir || DEFAULT_SETTINGS.sourcesDir,
     dataDir: cfg.dataDir || DEFAULT_SETTINGS.dataDir,
-    ai: { anthropicModel: cfg.anthropicModel || DEFAULT_SETTINGS.ai.anthropicModel },
+    ai: {
+      model: cfg.aiModel || DEFAULT_SETTINGS.ai.model,
+      command: cfg.claudeCommand || DEFAULT_SETTINGS.ai.command,
+    },
     gemini: {
       engine: (cfg.geminiEngine === 'gemini-cli' ? 'gemini-cli' : cfg.geminiEngine === 'antigravity' ? 'antigravity' : DEFAULT_SETTINGS.gemini.engine),
       command: cfg.geminiCommand || DEFAULT_SETTINGS.gemini.command,
@@ -33,11 +36,23 @@ function envDefaults(): AppSettings {
   } as Partial<AppSettings>)
 }
 
+/**
+ * Stored overrides from older versions: `ai.anthropicModel` (API-key era) became `ai.model`. Keep the user's model
+ * and drop the dead key so it neither lingers in the stored JSON nor reaches the client.
+ */
+export function migrateStoredSettings(stored: Partial<AppSettings> | undefined | null): Partial<AppSettings> | undefined {
+  if (!stored || typeof stored !== 'object') return undefined
+  const ai = stored.ai as (Partial<AppSettings['ai']> & { anthropicModel?: unknown }) | undefined
+  if (!ai || typeof ai !== 'object' || !('anthropicModel' in ai)) return stored
+  const { anthropicModel, ...rest } = ai
+  if (!rest.model && typeof anthropicModel === 'string' && anthropicModel.trim()) rest.model = anthropicModel.trim()
+  return { ...stored, ai: rest as AppSettings['ai'] }
+}
+
 export async function getSettings(): Promise<AppSettings> {
   const db = await useDb()
   const res = await db.query<{ value: Partial<AppSettings> }>('SELECT value FROM settings WHERE key = $1', [SETTINGS_KEY])
-  const stored = res.rows[0]?.value
-  return deepMerge(envDefaults(), stored)
+  return deepMerge(envDefaults(), migrateStoredSettings(res.rows[0]?.value))
 }
 
 /**
@@ -47,7 +62,7 @@ export async function getSettings(): Promise<AppSettings> {
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const db = await useDb()
   const res = await db.query<{ value: Partial<AppSettings> }>('SELECT value FROM settings WHERE key = $1', [SETTINGS_KEY])
-  const stored = (res.rows[0]?.value ?? {}) as Partial<AppSettings>
+  const stored = (migrateStoredSettings(res.rows[0]?.value) ?? {}) as Partial<AppSettings>
   const overrides = deepMerge(stored as AppSettings, patch)
   await db.query(
     `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, now())

@@ -20,8 +20,8 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-only. Override with NUXT_* environment variables (see .env.example).
-    anthropicApiKey: '',
-    anthropicModel: 'claude-sonnet-5-5',
+    aiModel: 'claude-sonnet-5-5',
+    claudeCommand: 'claude',
     dataDir: 'data',
     sourcesDir: 'sources',
     stateDir: '.phrapedia',
