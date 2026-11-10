@@ -16,7 +16,7 @@ npm run tauri:dev   # デスクトップアプリ開発起動（Rust 必要）
 npm run tauri:build # デスクトップアプリのビルド（deb / rpm / AppImage / macOS dmg。src-tauri/tauri.bundle.conf.json を重ねる）
 cd src-tauri && cargo check && cargo clippy --all-targets -- -D warnings && cargo test   # Rust 側。変更後は必ず通す
 ```
-`build` / `preview` / `start` / `start:render` と `render.yaml` / `scripts/render-start.mjs` は旧 web 版（Render）の残置。この構成では動かない（`.output/server` は生成されない）。削除は未判断。
+Web 版（Render）は 0.2.0 で終了。履歴は tag `web-legacy-render`。
 
 ## 実行形
 - `src-tauri/src/main.rs`: 先頭引数が `mcp` なら Tauri を初期化せず stdio MCP サーバ（`phrapedia mcp --config-dir <dir> --data-dir <dir>`）。それ以外は GUI。

@@ -285,4 +285,4 @@ HTTP 層の `cors` / `csrf` / `auth` middleware は不要（サーバが無い�
 - 旧 PGlite（`state/pglite`）のチャット履歴・設定・Web 調査キャッシュは **移行しない**。AppSettings は既定値から開始（2 パスの `settings.json` は維持）。
 - 検索 index・Web 調査キャッシュは SQLite に作り直し（再 index は自動）。
 - `NUXT_*` / `PHRAPEDIA_ROOT` などの環境変数による設定上書きは廃止（デスクトップ専用化）。
-- Render デプロイ / `npm run dev` の Web 版は新構成では提供しない（server/ 削除は frontend worker）。
+- Web 版（Render）は 0.2.0 で終了。履歴は tag `web-legacy-render`。
