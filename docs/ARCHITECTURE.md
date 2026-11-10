@@ -2,7 +2,7 @@
 
 タイの高僧・寺院・プラクルアン（お守り）の情報を、**Markdown ファイルを正本**として蓄積するローカルファースト型の知識ベース。デスクトップ専用（Rust + Tauri v2）。実行時に Node / Nitro / PGlite は使わない。
 
-> 旧構成（Nuxt SSR + Nitro の REST API / HTTP `/mcp` / PGlite、Render 配備）は旧 branch のまま。この文書は新構成（`feat/rust-native` 由来）の説明。command 単位の契約は [NATIVE_API.md](NATIVE_API.md)。
+> 旧構成（Nuxt SSR + Nitro の REST API / HTTP `/mcp` / PGlite）は旧 branch のまま。Web 版（Render）は 0.2.0 で終了。履歴は tag `web-legacy-render`。この文書は新構成（`feat/rust-native` 由来）の説明。command 単位の契約は [NATIVE_API.md](NATIVE_API.md)。
 
 ## 技術スタック
 

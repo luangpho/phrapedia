@@ -9,7 +9,7 @@ export interface ConfirmDialogOptions {
 /**
  * Confirmation dialog. Returns true when the user accepts.
  * Tauri: plugin-dialog `ask` (window.confirm is a no-op Cancel in WKWebView because wry has no JS panel).
- * Browser (Render / nuxt dev): window.confirm.
+ * Browser (nuxt dev): window.confirm.
  * If ask rejects (e.g. missing permission) it resolves false: keep the user's edits rather than silently discard them
  * (window.confirm is no fallback here, it is a no-op Cancel in WKWebView).
  */

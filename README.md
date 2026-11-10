@@ -12,7 +12,7 @@
 
 この構成は旧 Nuxt SSR + Node 版の全面再実装です。次の点が旧版と非互換です。
 
-- **デスクトップ専用**になりました。ブラウザで開く Web 版（`npm run dev` / `npm start` のサーバ、Render 配備）は **旧 branch のまま** で、この構成には含まれません。
+- **デスクトップ専用**になりました。Web 版（Render）は 0.2.0 で終了。履歴は tag `web-legacy-render`。
 - **旧 PGlite（`.phrapedia/`）のデータは移行されません**（チャット履歴・一次資料の検索インデックス・Web 調査キャッシュ・**旧版で保存したアプリ設定（AI / Gemini / Git の設定）**）。設定は既定値に戻るので、必要なら設定画面で入れ直してください（`settings.json` の 2 パスは同じ場所・同じキーなのでそのまま使えます）。インデックスとキャッシュは自動で作り直されます。チャット履歴は引き継がれません。レコード（`data/`）と一次資料は Markdown なのでそのまま使えます。
 - **HTTP の `/mcp`（`http://localhost:3000/mcp`）は廃止**しました。代わりに `phrapedia mcp`（stdio）を使います（[MCP で使う](#mcp-で使う)）。
 - REST API・SSE は無く、フロントは Tauri command を直接呼びます。
@@ -31,14 +31,13 @@
 6. [画面の流れ](#画面の流れ)
 7. [設定リファレンス](#設定リファレンス)
 8. [Git 同期](#git-同期)
-9. [旧 Web 版（Render）について](#旧-web-版renderについて)
-10. [MCP で使う](#mcp-で使う)
-11. [開発コマンド](#開発コマンド)
-12. [リリース手順](#リリース手順)
-13. [tap リポジトリの作り方](#tap-リポジトリの作り方)
-14. [署名・notarization の設定](#署名notarization-の設定)
-15. [トラブルシューティング](#トラブルシューティング)
-16. [ロードマップ](#ロードマップ)
+9. [MCP で使う](#mcp-で使う)
+10. [開発コマンド](#開発コマンド)
+11. [リリース手順](#リリース手順)
+12. [tap リポジトリの作り方](#tap-リポジトリの作り方)
+13. [署名・notarization の設定](#署名notarization-の設定)
+14. [トラブルシューティング](#トラブルシューティング)
+15. [ロードマップ](#ロードマップ)
 
 ---
 
@@ -235,17 +234,6 @@ Web 調査用の `GEMINI_API_KEY` は画面からは設定できません。ア�
 - データフォルダをリポジトリ外に設定した場合、同期機能は使えません。
 - 一次資料（`sources/`）を共有したい場合は、自分で Git 管理するか別の手段（クラウドドライブ等）を使ってください。
 
-## 旧 Web 版（Render）について
-
-Web 版（Nuxt SSR + Node サーバ、Render 配備）はこの構成に含まれません。**旧 branch のまま** で、`render` branch への push による自動デプロイもそちらの運用です。
-
-この repo には旧 Web 版の残置物があり、**この構成のコードでは動きません**（Node サーバが無いため `.output/server` が生成されません）。
-
-- `render.yaml`、`scripts/render-start.mjs`
-- `package.json` の scripts `start` / `start:render` / `build` / `preview`
-
-削除するかどうかは未判断です（Render 運用を続ける場合は旧 branch から行ってください）。デスクトップ版のビルド・テスト・リリースには影響しません。
-
 ## MCP で使う
 
 HTTP の `/mcp` は廃止しました。外部クライアントは同じバイナリのサブコマンド **`phrapedia mcp`**（stdio）を起動して接続します。GUI は不要で、標準入力が閉じると終了します。
@@ -324,7 +312,7 @@ cargo run --example chat_smoke -- abort /path/to/work       # 中断で子・孫
 cargo run --example chat_smoke -- resume /path/to/work      # --resume で文脈と最新下書きが反映されること
 ```
 
-旧 Web 版の `start` / `start:render` / `build` / `preview` と `render.yaml` / `scripts/render-start.mjs` は残置です（[旧 Web 版について](#旧-web-版renderについて)）。
+Web 版（Render）は 0.2.0 で終了。履歴は tag `web-legacy-render`。
 
 ## リリース手順
 

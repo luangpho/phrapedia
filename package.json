@@ -6,14 +6,10 @@
   "description": "Knowledge base for Thai venerable monks, temples and amulets (Phra Khrueang)",
   "scripts": {
     "dev": "nuxt dev --port 1420",
-    "build": "nuxt build",
     "generate": "nuxt generate",
-    "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
-    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
-    "start:render": "node scripts/render-start.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build --config src-tauri/tauri.bundle.conf.json"
