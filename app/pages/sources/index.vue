@@ -6,7 +6,7 @@ useHead({ title: '一次資料 - Phrapedia' })
 const route = useRoute()
 const router = useRouter()
 
-const { data: files, status, error, refresh } = useFetch<SourceFile[]>('/api/sources', { key: 'sources', default: () => [] })
+const { data: files, status, error, refresh } = useAsyncData<SourceFile[]>('sources', () => api.listSources(), { default: () => [] })
 
 const selected = computed(() => (typeof route.query.path === 'string' ? route.query.path : ''))
 function select(path: string) {
@@ -57,7 +57,7 @@ async function runSearch() {
   searching.value = true
   searchError.value = null
   try {
-    const res = await $fetch<SourceSearchHit[]>('/api/sources/search', { query: { q: query, limit: 30 } })
+    const res = await api.searchSources(query, 30)
     if (my === seq) hits.value = res
   } catch (err) {
     if (my === seq) searchError.value = errorMessage(err)

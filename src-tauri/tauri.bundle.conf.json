@@ -1,7 +1,3 @@
 {
-  "bundle": {
-    "resources": {
-      "../.output/server": "server"
-    }
-  }
+  "bundle": {}
 }

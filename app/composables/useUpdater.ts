@@ -6,7 +6,7 @@
  * installs and relaunches. Tauri plugins are imported lazily, so a plain browser never evaluates them.
  */
 import { ref, shallowRef } from 'vue'
-import { isTauriRuntime } from './useDesktop'
+import { isTauriRuntime } from '../utils/api'
 import { confirmDialog } from '../utils/dialog'
 
 export type UpdaterState =

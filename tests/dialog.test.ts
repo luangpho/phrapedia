@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const isTauriRuntime = vi.fn()
 const ask = vi.fn()
-vi.mock('../app/composables/useDesktop', () => ({ isTauriRuntime: () => isTauriRuntime() }))
+vi.mock('../app/utils/api', () => ({ isTauriRuntime: () => isTauriRuntime() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: (...a: unknown[]) => ask(...a) }))
 
 const { confirmDialog } = await import('../app/utils/dialog')

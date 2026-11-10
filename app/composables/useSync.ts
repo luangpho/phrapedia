@@ -10,7 +10,7 @@ const ACTION_LABELS: Record<SyncAction, string> = {
 }
 
 export function useSync() {
-  const status = useFetch<SyncStatus>('/api/sync/status', { key: 'sync-status', dedupe: 'defer' })
+  const status = useAsyncData<SyncStatus>('sync-status', () => api.syncStatus(), { dedupe: 'defer' })
   const running = useState<SyncAction | null>('sync-running', () => null)
   const toast = useToast()
 
@@ -18,8 +18,7 @@ export function useSync() {
     if (running.value) return
     running.value = action
     try {
-      const body = action === 'commit' || action === 'sync' ? { message: message?.trim() || undefined } : undefined
-      const res = await $fetch<SyncResult>(`/api/sync/${action}`, { method: 'POST', body })
+      const res = await api.syncRun(action, action === 'commit' || action === 'sync' ? message?.trim() || undefined : undefined)
       toast.add({
         title: res.ok ? `${ACTION_LABELS[action]}しました` : `${ACTION_LABELS[action]}に失敗しました`,
         description: res.message,

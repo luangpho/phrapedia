@@ -12,14 +12,15 @@ const initialName = computed(() => (typeof route.query.name === 'string' ? route
 const toast = useToast()
 const { create } = useEntities()
 
-const { data: tpl, status, error, refresh } = await useFetch<{ raw: string }>(
-  () => `/api/entities/${kind.value}/template`,
-  { key: computed(() => `entity-template:${kind.value}:${initialName.value}`), query: computed(() => (initialName.value ? { name: initialName.value } : {})) },
+const { data: tpl, status, error, refresh } = await useAsyncData<string>(
+  () => `entity-template:${kind.value}:${initialName.value}`,
+  () => api.entityTemplate(kind.value, initialName.value),
+  { watch: [kind, initialName] },
 )
 
-const raw = ref(tpl.value?.raw ?? '')
-const baseline = ref(tpl.value?.raw ?? '')
-watch(() => tpl.value?.raw, (v) => {
+const raw = ref(tpl.value ?? '')
+const baseline = ref(tpl.value ?? '')
+watch(() => tpl.value, (v) => {
   if (v == null) return
   // Replace the template only while the user has not typed anything yet.
   if (raw.value === baseline.value) raw.value = v

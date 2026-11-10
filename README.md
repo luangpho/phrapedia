@@ -1,12 +1,23 @@
 # Phrapedia
 
-タイの **高僧・寺院・プラクルアン（お守り）** の情報を、AI と一緒に調べて **Markdown ファイル** として蓄積するローカルファースト型の知識ベースです。
+タイの **高僧・寺院・プラクルアン（お守り）** の情報を、AI と一緒に調べて **Markdown ファイル** として蓄積するローカルファースト型の知識ベースです。**デスクトップアプリ専用**（Rust + Tauri v2。実行時に Node は不要）です。
 
 - 正本は `data/<種類>/<slug>.md`（YAML frontmatter + Markdown）。Git で履歴管理し、GitHub に同期できます。
 - 手元の **一次資料**（`sources/` のメモ・画像）を最優先し、足りない部分だけを **Google の CLI（Antigravity CLI）による Web 調査** で補います。Web 由来の情報は常に「未確認」として扱います。
-- 同じツール群を **MCP サーバ**（`/mcp`）として公開しているので、Claude Code や Antigravity CLI からも読み書きできます。
+- 同じツール群を **stdio の MCP サーバ**（`phrapedia mcp`）として公開しているので、Claude Code や Antigravity CLI からも読み書きできます。
 
-> 内部構成の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
+> 内部構成の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、フロントとバックエンドの契約は [docs/NATIVE_API.md](docs/NATIVE_API.md) を参照してください。
+
+### 旧版（Web 版）からの変更点
+
+この構成は旧 Nuxt SSR + Node 版の全面再実装です。次の点が旧版と非互換です。
+
+- **デスクトップ専用**になりました。ブラウザで開く Web 版（`npm run dev` / `npm start` のサーバ、Render 配備）は **旧 branch のまま** で、この構成には含まれません。
+- **旧 PGlite（`.phrapedia/`）のデータは移行されません**（チャット履歴・一次資料の検索インデックス・Web 調査キャッシュ・**旧版で保存したアプリ設定（AI / Gemini / Git の設定）**）。設定は既定値に戻るので、必要なら設定画面で入れ直してください（`settings.json` の 2 パスは同じ場所・同じキーなのでそのまま使えます）。インデックスとキャッシュは自動で作り直されます。チャット履歴は引き継がれません。レコード（`data/`）と一次資料は Markdown なのでそのまま使えます。
+- **HTTP の `/mcp`（`http://localhost:3000/mcp`）は廃止**しました。代わりに `phrapedia mcp`（stdio）を使います（[MCP で使う](#mcp-で使う)）。
+- REST API・SSE は無く、フロントは Tauri command を直接呼びます。
+- **対応環境は macOS（Homebrew cask / dmg）と Linux（deb / rpm / AppImage）**です。Windows は未検証で、子プロセスの process group 単位の終了（`claude` の孫プロセスの回収）が未実装（no-op）です。
+- `.env` は読みません。パスは設定画面、`GEMINI_API_KEY` などはプロセスの環境変数で渡します。
 
 ---
 
@@ -20,7 +31,7 @@
 6. [画面の流れ](#画面の流れ)
 7. [設定リファレンス](#設定リファレンス)
 8. [Git 同期](#git-同期)
-9. [Render へデプロイ](#render-へデプロイ)
+9. [旧 Web 版（Render）について](#旧-web-版renderについて)
 10. [MCP で使う](#mcp-で使う)
 11. [開発コマンド](#開発コマンド)
 12. [リリース手順](#リリース手順)
@@ -38,50 +49,50 @@
 | レコード管理 | 高僧・寺院のレコードを一覧・閲覧・編集・削除。Markdown プレビュー付きエディタ |
 | AI チャット | レコードごとのチャット窓。AI が一次資料を検索し、Web 調査で補い、**下書き** をエディタに反映（保存はユーザーが行う） |
 | 一次資料 | 任意フォルダの Markdown / 画像を全文検索（タイ語・日本語・英語の部分一致）・プレビュー |
-| Web 調査 | Antigravity CLI `agy`（Google 検索）をサーバから実行。旧 Gemini CLI も選択可。結果はキャッシュ |
+| Web 調査 | Antigravity CLI `agy`（Google 検索）をアプリから実行。旧 Gemini CLI も選択可。結果はキャッシュ |
 | Git 同期 | `data/` だけをコミット → `pull --rebase` → `push`。保存ごとの自動コミット／自動プッシュも可 |
-| MCP サーバ | `http://localhost:3000/mcp`（Streamable HTTP）。外部の AI エージェントから同じ操作が可能 |
+| MCP サーバ | `phrapedia mcp`（stdio）。外部の AI エージェントから同じ操作が可能 |
 | ダークモード | Nuxt UI のカラーモードに対応 |
 
 ## 必要なもの
 
-- **Node.js 22 以上**
-- **Antigravity CLI（`agy`）**（Web 調査に使用。2026 年 6 月に無料枠 / Google One 向けの Gemini CLI を置き換えた Google 公式 CLI）
-  ```bash
-  curl -fsSL https://antigravity.google/cli/install.sh | bash   # ~/.local/bin/agy に入る
-  agy --version
-  ```
-  認証はどちらか一方:
-  - このマシンで一度 `agy` を対話起動して **Google アカウントでサインイン** しておく（資格情報は OS のキーリングに保存され再利用されます）
-  - サーバ用途: 環境変数 `GEMINI_API_KEY`（[Google AI Studio](https://aistudio.google.com/) で発行）を設定し、`~/.gemini/antigravity-cli/settings.json` に `{"modelProvider": "gemini"}` を書く
-  - 旧 **Gemini CLI**（`npm i -g @google/gemini-cli`、有料枠 / API キー利用者向け）を使い続ける場合は 設定 →「CLI」で `Gemini CLI` を選ぶ
+実行に必要なもの（Node.js は **不要**。`node` / `npm` はソースからビルドする時だけ必要です）:
+
 - **Claude Code CLI（`claude`）**（チャット AI に使用。別途インストールが必要で、**API キーは不要**）
   ```bash
   claude --version     # 入っているか確認（導入手順: https://docs.claude.com/en/docs/claude-code/overview）
   claude               # 一度対話起動して、Claude のアカウント（Pro / Max など）でログインしておく
   ```
   - チャットは `claude -p`（headless 実行）を子プロセスとして呼び出し、**`claude` にログインしたアカウントの契約枠**で動きます。`ANTHROPIC_API_KEY` 等が環境にあれば CLI がそちらを使いますが、アプリ側では何も扱いません。
-  - `claude` が PATH にない場合は 設定 →「AI」の「コマンド」に絶対パスを指定します。
+  - `claude` が見つからない場合は 設定 →「AI」の「コマンド」に絶対パスを指定します。
   - チャット AI は **Claude 固定** です。Gemini（`agy`）はチャットの代わりにはならず、**インターネット検索による情報収集（`web_research` ツール）にだけ** 使われます。
-- Git（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
+- **Git**（同期を使う場合。GitHub の認証は通常の `git push` が通る状態にしておく）
+- **Antigravity CLI（`agy`）**（任意。Web 調査に使用。2026 年 6 月に無料枠 / Google One 向けの Gemini CLI を置き換えた Google 公式 CLI。無くてもチャットと一次資料検索は使えます）
+  ```bash
+  curl -fsSL https://antigravity.google/cli/install.sh | bash   # ~/.local/bin/agy に入る
+  agy --version
+  ```
+  認証はどちらか一方:
+  - このマシンで一度 `agy` を対話起動して **Google アカウントでサインイン** しておく（資格情報は OS のキーリングに保存され再利用されます）
+  - 環境変数 `GEMINI_API_KEY`（[Google AI Studio](https://aistudio.google.com/) で発行）を設定し、`~/.gemini/antigravity-cli/settings.json` に `{"modelProvider": "gemini"}` を書く
+  - 旧 **Gemini CLI**（`npm i -g @google/gemini-cli`、有料枠 / API キー利用者向け）を使い続ける場合は 設定 →「CLI」で `Gemini CLI` を選ぶ
+
+ソースからビルドする場合のみ: Node.js 22 以上、Rust ツールチェーン、Tauri の OS 別前提パッケージ（[Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)）。
 
 ## クイックスタート
 
+利用者は [Homebrew](#homebrew-でインストール)（macOS）か、GitHub Release のインストーラを使います。ソースから動かす場合:
+
 ```bash
 git clone <このリポジトリ> phrapedia && cd phrapedia
-npm install
-cp .env.example .env      # 必要なら編集（チャットは `claude` のログインで動くので API キー不要。GEMINI_API_KEY は Web 調査用）
-npm run dev               # http://localhost:3000
+npm ci
+npm run tauri:dev     # 開発起動（nuxt dev --port 1420 + tauri dev）
+npm run tauri:build   # インストーラ生成（Linux: deb / rpm / AppImage、macOS: dmg。出力は src-tauri/target/release/bundle/）
 ```
 
-デスクトップアプリとして開発する場合（Rust ツールチェーンと、Tauri の OS 別前提パッケージが必要。[Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)）:
+`npm run dev` を単体のブラウザで開いても Tauri command が無いため動きません（各画面に「この機能はデスクトップアプリ専用です」と出ます）。
 
-```bash
-npm run tauri:dev     # = npm run build && tauri dev
-npm run tauri:build   # インストーラ生成（src-tauri/target/release/bundle/）
-```
-
-初回起動時に `.phrapedia/`（PGlite のデータベース。設定・チャット履歴・検索インデックス・Web 調査キャッシュ）が作られます。Git 管理外です。
+初回起動時に、アプリデータ dir（macOS: `~/Library/Application Support/jp.grrow.phrapedia`、Linux: `~/.local/share/jp.grrow.phrapedia`）に `state/phrapedia.sqlite`（チャット履歴・検索インデックス・Web 調査キャッシュ）と既定のデータセット `dataset/` が作られます。レコードを置く場所は 設定画面の **データセットパス** で変えられます（このリポジトリの clone をそのまま指定すると、同梱のサンプルが見えます）。
 
 サンプルとして以下のレコードと一次資料が同梱されています（いずれも `status: draft`、「要確認」箇所あり）。
 
@@ -91,23 +102,14 @@ npm run tauri:build   # インストーラ生成（src-tauri/target/release/bund
 | 寺院 | `data/temples/wat-rakhang.md`（ワット・ラカン）, `data/temples/wat-chang-hai.md`（ワット・チャーンハイ） |
 | 一次資料 | `sources/notes/somdet-to.md`, `sources/notes/wat-rakhang.md`（サンプル） |
 
-本番ビルドで動かす場合:
-
-```bash
-npm run build
-npm start            # = node --env-file-if-exists=.env .output/server/index.mjs（本番サーバは .env を自動では読みません）
-```
-
-別の場所から起動する場合は `PHRAPEDIA_ROOT=/path/to/phrapedia` を指定します。待ち受けは既定で全インターフェース（0.0.0.0）なので、
-自分だけが使うなら `HOST=127.0.0.1 PORT=3000 npm start` のようにローカルに限定してください。
-
 ### セキュリティ上の注意
 
 Phrapedia はログイン機構のない「自分の PC で動かすツール」です。
 
-- 設定画面の値（CLI のコマンドパス、フォルダなど）はサーバ側でそのまま使われます。**信頼できる人だけが届くネットワーク**で動かしてください（`HOST=127.0.0.1` 推奨）。
-- ブラウザからの API 呼び出しには同一オリジン・JSON 限定のチェック（CSRF 対策）がかかっています。
-- 認証情報（`GEMINI_API_KEY` など）はブラウザへ渡さず、`.env` / 環境変数のみで扱います。Claude のログイン情報は `claude` CLI が保持します。
+- 配布版は待ち受けるネットワークポートを持ちません（HTTP サーバは無し）。外部クライアントとの接続は `phrapedia mcp` の stdio だけです。
+- 設定画面の値（CLI のコマンドパス、フォルダなど）はそのまま使われます。
+- 認証情報（`GEMINI_API_KEY` など）はアプリに保存しません。環境変数で渡し、子プロセス（`agy` / `gemini`）に引き継がれます。Claude のログイン情報は `claude` CLI が保持します。
+- チャットの `claude -p` に渡す system prompt と MCP 設定は 0600 の一時ファイルで渡し、`ps` には中身が出ません。
 - アプリ内のチャット AI には Git 同期ツール（`sync_data`）を渡していません。GitHub への push は常に同期パネルからの操作です（自動プッシュ設定を除く）。
 
 ## Homebrew でインストール
@@ -119,11 +121,11 @@ brew tap luangpho/tap
 brew install --cask phrapedia
 ```
 
-- cask は `depends_on formula: "node"` を持つので、Homebrew の `node` も一緒に入ります。アプリは `node` を子プロセス（sidecar）として起動します。
+- cask は Node に依存しません（アプリは単体の Rust バイナリです）。
 - 初回起動後、設定画面で **データセットパス**（レコード・一次資料の読み出し元）と **書き出し先パス**（保存先・Git 同期の対象）を指定します（詳細は [設定リファレンス](#設定リファレンス)）。
 - インストール後そのまま起動できます。cask がインストール時に隔離属性（quarantine）を外します（ad-hoc 署名のビルド）。
 - 更新: `brew upgrade --cask phrapedia`、またはアプリのサイドバー上部の更新アイコン（下記「更新方法」）。削除: `brew uninstall --cask phrapedia`（`--zap` でアプリの設定・キャッシュも削除）。
-- チャットには **Claude Code CLI（`claude`）を別途インストール**してください（cask は `claude` に依存しません）。アプリは sidecar の PATH に `/opt/homebrew/bin`・`/usr/local/bin`・`$HOME/.local/bin` を足して `claude` を探します。それ以外の場所にある場合は 設定 →「AI」でコマンドの絶対パスを指定してください。
+- チャットには **Claude Code CLI（`claude`）を別途インストール**してください（cask は `claude` に依存しません）。アプリは PATH に加えて login shell の PATH と `/opt/homebrew/bin`・`/usr/local/bin`・`$HOME/.local/bin` などを探して `claude` / `agy` / `git` を見つけます。それ以外の場所にある場合は 設定 →「AI」でコマンドの絶対パスを指定してください。
 - 注意: Finder / Launchpad から起動した GUI アプリはシェルの環境変数を引き継ぎません。`GEMINI_API_KEY` などは、ターミナルから `open -a Phrapedia` で起動するか、`launchctl setenv` で渡してください。
 
 ## 情報の優先順位
@@ -176,20 +178,20 @@ brew install --cask phrapedia
 
 ## 設定リファレンス
 
-設定画面の値は PGlite（`.phrapedia/`）に保存され、`.env` の値より優先されます。項目は `shared/types/settings.ts` の `AppSettings` に対応します。
+設定画面の値は app config dir の `app-settings.json`（上書きした分だけ保存、既定値は読み込み時に補完）に保存されます。項目は `shared/types/settings.ts` の `AppSettings` に対応します。
 
 | 項目 | キー | 既定値 | 説明 |
 |---|---|---|---|
-| 一次資料フォルダ | `sourcesDir` | `sources` | 絶対パス、またはプロジェクトからの相対パス。`.env`: `NUXT_SOURCES_DIR` |
-| データフォルダ | `dataDir` | `data` | `data/<種類>/<slug>.md` の置き場所。Git 同期するならリポジトリ内に。`.env`: `NUXT_DATA_DIR` |
-| Claude モデル | `ai.model` | `claude-sonnet-5-5` | `claude --model` に渡す。`.env`: `NUXT_AI_MODEL`（旧設定 `ai.anthropicModel` は読み込み時に移行） |
+| 一次資料フォルダ | `sourcesDir` | `sources` | データセットパスからの相対パス（または絶対パス） |
+| データフォルダ | `dataDir` | `data` | `data/<種類>/<slug>.md` の置き場所（データセットパスからの相対位置）。Git 同期するならリポジトリ内に |
+| Claude モデル | `ai.model` | `claude-sonnet-5-5` | `claude --model` に渡す（旧設定 `ai.anthropicModel` は読み込み時に移行） |
 | 最大トークン | `ai.maxTokens` | `8192` | 1 回の応答の最大出力トークン（`CLAUDE_CODE_MAX_OUTPUT_TOKENS` で渡す） |
 | 追加の指示 | `ai.extraInstructions` | （空） | システムプロンプト末尾に追加される指示 |
-| Claude コマンド | `ai.command` | `claude` | 実行ファイル名または絶対パス。`.env`: `NUXT_CLAUDE_COMMAND` |
+| Claude コマンド | `ai.command` | `claude` | 実行ファイル名または絶対パス |
 | Claude 追加引数 | `ai.args` | （空） | `claude -p` に追加で渡す引数（例: `--effort low`） |
 | Claude タイムアウト | `ai.timeoutMs` | `600000` | 1 回の応答がこれを超えたら CLI を終了させる |
-| CLI | `gemini.engine` | `antigravity` | `antigravity`（`agy`）または `gemini-cli`（旧 `gemini`）。`.env`: `NUXT_GEMINI_ENGINE` |
-| コマンド | `gemini.command` | `agy` | 実行ファイル名または絶対パス（例: `~/.local/bin/agy`）。`.env`: `NUXT_GEMINI_COMMAND` |
+| CLI | `gemini.engine` | `antigravity` | `antigravity`（`agy`）または `gemini-cli`（旧 `gemini`） |
+| コマンド | `gemini.command` | `agy` | 実行ファイル名または絶対パス（例: `~/.local/bin/agy`） |
 | 追加引数 | `gemini.args` | `[]` | CLI に渡す追加引数（1 行に 1 つ。例: `--print-timeout`, `--effort`） |
 | モデル | `gemini.model` | （空 = CLI 既定） | agy は `--model`、gemini は `-m` に渡す（例: `flash`, `pro`） |
 | 承認モード | （固定） | `auto` | agy は `--mode auto`、gemini は `--approval-mode auto_edit` を常に付与。変更したい場合は追加引数で `--mode ...` / `--approval-mode ...` を指定すると上書きされる |
@@ -201,18 +203,23 @@ brew install --cask phrapedia
 | 自動コミット | `git.autoCommit` | `false` | レコードの保存・削除ごとにコミット |
 | 自動プッシュ | `git.autoPush` | `false` | 自動コミット後に push |
 
-### デスクトップアプリ（Tauri）の設定項目
+### 保存場所とパス設定
 
-デスクトップアプリでは、上記に加えて次の 2 つのパスを設定画面で指定します（Tauri の app config dir の `settings.json` に保存され、再起動後も保持されます）。
+次の 2 つのパスは設定画面で指定します（app config dir の `settings.json` に保存。保存すると即反映され、再起動は不要です）。
 
-| 項目 | 意味 | 既定値 | sidecar への渡し方 |
-|---|---|---|---|
-| データセットパス | 読み出し元。直下に `data/<kind>/`（monks, temples, amulets）と `sources/` を持つ root。リポジトリの clone をそのまま指定できる | アプリデータ dir 配下 `dataset` | `PHRAPEDIA_DATASET_PATH` |
-| 書き出し先パス | 書き込み先。同じ配置の root。Git 同期の対象（git リポジトリの時のみ） | データセットパスと同じ | `PHRAPEDIA_EXPORT_PATH` |
+| 項目 | 意味 | 既定値 |
+|---|---|---|
+| データセットパス | 読み出し元。直下に `data/<kind>/`（monks, temples, amulets）と `sources/` を持つ root。リポジトリの clone をそのまま指定できる | アプリデータ dir 配下 `dataset` |
+| 書き出し先パス | 書き込み先。同じ配置の root。Git 同期の対象（git リポジトリの時のみ） | データセットパスと同じ |
 
-絶対パスでない・存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーで表示され、該当 API は 409 を返します（アプリは落ちません）。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。CLI 起動（`npm run dev` / `npm start`）や Render では従来どおりで、これらの環境変数は不要です。
+絶対パスでない・存在しない・ディレクトリでない・書き込めない（書き出し先）パスはエラーバナーに表示されます（アプリは落ちません）。その間、レコード・一次資料・Git の操作は「データセットパスが使えません: …」「書き出し先パスが使えません: …」で失敗し、設定とチャット履歴は使えます。
 
-Web 調査用の `GEMINI_API_KEY` は画面からは設定できません（ブラウザに渡さないため）。`.env` か環境変数で設定します。チャットは `claude` のログイン（または環境の `ANTHROPIC_API_KEY`）を CLI がそのまま使うので、アプリ側の設定はありません。そのほか `NUXT_STATE_DIR`（PGlite の場所、既定 `.phrapedia`）、`PHRAPEDIA_ROOT`（プロジェクトルート、既定はカレントディレクトリ）があります。
+| 場所 | 内容 |
+|---|---|
+| app config dir（macOS: `~/Library/Application Support/jp.grrow.phrapedia`、Linux: `~/.config/jp.grrow.phrapedia`） | `settings.json`（2 パス）、`app-settings.json`（上記の項目） |
+| app data dir（macOS は同上、Linux: `~/.local/share/jp.grrow.phrapedia`） | `state/phrapedia.sqlite`（チャット履歴・検索インデックス・調査キャッシュ。消しても再生成され、失われるのは履歴とキャッシュだけ）、`state/claude-work/`・`state/gemini-work/`（CLI の作業 dir）、`dataset/`（既定のデータセット） |
+
+Web 調査用の `GEMINI_API_KEY` は画面からは設定できません。アプリを起動するプロセスの環境変数として渡してください（`.env` は読みません）。チャットは `claude` のログイン（または環境の `ANTHROPIC_API_KEY`）を CLI がそのまま使うので、アプリ側の設定はありません。
 
 ## Git 同期
 
@@ -228,83 +235,60 @@ Web 調査用の `GEMINI_API_KEY` は画面からは設定できません（ブ�
 - データフォルダをリポジトリ外に設定した場合、同期機能は使えません。
 - 一次資料（`sources/`）を共有したい場合は、自分で Git 管理するか別の手段（クラウドドライブ等）を使ってください。
 
-## Render へデプロイ
+## 旧 Web 版（Render）について
 
-`render.yaml`（Blueprint）を同梱しています。**`render` ブランチへの push で自動デプロイ**される構成です。
+Web 版（Nuxt SSR + Node サーバ、Render 配備）はこの構成に含まれません。**旧 branch のまま** で、`render` branch への push による自動デプロイもそちらの運用です。
 
-初回だけ Render ダッシュボードで行う作業:
+この repo には旧 Web 版の残置物があり、**この構成のコードでは動きません**（Node サーバが無いため `.output/server` が生成されません）。
 
-1. Render → **New → Blueprint** → この GitHub リポジトリを選択 → ブランチに **`render`** を指定して作成。
-   `render.yaml` の内容（Web サービス `phrapedia`、永続ディスク `/var/data`、環境変数）が読み込まれます。
-2. Environment で秘密情報を設定: `GEMINI_API_KEY`、`NUXT_BASIC_AUTH_USER` / `NUXT_BASIC_AUTH_PASSWORD`（Basic 認証。公開 URL になるため必ず設定）。
-3. 以後は `render` ブランチを更新するだけでデプロイが走ります。
+- `render.yaml`、`scripts/render-start.mjs`
+- `package.json` の scripts `start` / `start:render` / `build` / `preview`
 
-```bash
-git checkout render && git merge <作業ブランチ> && git push origin render
-```
-
-構成のポイント:
-
-| 項目 | 内容 |
-|---|---|
-| ビルド / 起動 | `npm ci && npm run build` / `node scripts/render-start.mjs`（初回起動時に `data/`・`sources/` のサンプルを永続ディスクへコピーしてからサーバを起動） |
-| データの置き場所 | `NUXT_DATA_DIR=/var/data/data`、`NUXT_SOURCES_DIR=/var/data/sources`、`NUXT_STATE_DIR=/var/data/state`（デプロイしてもレコードと PGlite が消えない） |
-| Antigravity CLI | ビルド時に公式スクリプトで導入し `bin/agy` に配置。`GEMINI_API_KEY` で認証（起動スクリプトが `modelProvider: "gemini"` を settings.json に書き込む） |
-| 認証 | `NUXT_BASIC_AUTH_USER` と `NUXT_BASIC_AUTH_PASSWORD` を両方設定すると全ページ・API・`/mcp` に Basic 認証がかかる（`/api/health` は除外）。MCP クライアントからは `Authorization: Basic ...` ヘッダで接続 |
-| プラン | 永続ディスクは有料インスタンス（starter 以上）が必要。無料で試す場合は `render.yaml` の `disk:` と `/var/data` 系の環境変数を外す（その場合データはデプロイごとに失われる） |
-| チャット AI | チャットは `claude`（Claude Code CLI）が必要ですが、Render には導入していません。Render 上でチャットを送ると「Claude Code CLI が見つかりません」という日本語エラーになります（ほかの機能は動作）。`render.yaml` の `NUXT_ANTHROPIC_API_KEY` はアプリが読まないため効果はありません |
-| Git 同期 | Render 上のデータフォルダはリポジトリ外（永続ディスク）なので同期パネルは使えません。一次資料の追加はサーバ上のディスクに直接置くか、ローカルで編集して Render の Shell / SFTP で転送してください。ローカル運用では従来どおり使えます |
+削除するかどうかは未判断です（Render 運用を続ける場合は旧 branch から行ってください）。デスクトップ版のビルド・テスト・リリースには影響しません。
 
 ## MCP で使う
 
-アプリ起動中は `http://localhost:3000/mcp`（Streamable HTTP, ステートレス）が MCP サーバになります。
+HTTP の `/mcp` は廃止しました。外部クライアントは同じバイナリのサブコマンド **`phrapedia mcp`**（stdio）を起動して接続します。GUI は不要で、標準入力が閉じると終了します。
+
+```
+<バイナリ> mcp --config-dir <app config dir> --data-dir <app data dir>
+```
+
+- バイナリ: macOS は `/Applications/Phrapedia.app/Contents/MacOS/Phrapedia`、Linux は `/usr/bin/phrapedia`（deb / rpm）や展開した AppImage 内のバイナリ。
+- `--config-dir` / `--data-dir` は **アプリが使っているものと同じ値** を渡します（データセットパスなどの設定を読むため）。アプリのホーム画面の「MCP」カードに、実際の値を入れた設定例が出ます。省略するとその OS 標準の `jp.grrow.phrapedia` 配下を使います。
+- GUI とは別プロセスなので、呼び出しごとに設定ファイルと SQLite（WAL）を読み直します。
 
 ### Claude Code
 
-リポジトリ直下に `.mcp.json` を同梱しています（このフォルダで `claude` を起動すると読み込まれます）。
-
-```json
-{
-  "mcpServers": {
-    "phrapedia": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp"
-    }
-  }
-}
-```
-
-別のプロジェクトから使う場合は `claude mcp add --transport http phrapedia http://localhost:3000/mcp`。
-
-### Antigravity CLI
-
 ```bash
-agy mcp add phrapedia --url http://localhost:3000/mcp
+claude mcp add-json phrapedia '{"type":"stdio","command":"/Applications/Phrapedia.app/Contents/MacOS/Phrapedia","args":["mcp","--config-dir","<app config dir>","--data-dir","<app data dir>"]}'
 ```
 
-（または共有設定 `~/.gemini/config/mcp_config.json` に `url` 付きのサーバ定義を追加。`agy mcp list` で確認。）
-
-### Gemini CLI（旧）
-
-`~/.gemini/settings.json`（またはプロジェクトの `.gemini/settings.json`）:
+または `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "phrapedia": {
-      "httpUrl": "http://localhost:3000/mcp"
+      "type": "stdio",
+      "command": "/Applications/Phrapedia.app/Contents/MacOS/Phrapedia",
+      "args": ["mcp", "--config-dir", "<app config dir>", "--data-dir", "<app data dir>"]
     }
   }
 }
 ```
+
+### Antigravity CLI / Gemini CLI（旧）
+
+どちらも stdio の MCP サーバ定義（`command` と `args`）を追加します。上記と同じ値を使ってください。設定場所は `agy mcp add` / `~/.gemini/config/mcp_config.json`（Antigravity）、`~/.gemini/settings.json` の `mcpServers`（Gemini CLI）。**これらのクライアントでの接続は未確認です**（確認済みは Claude Code のみ）。
 
 ### ツール一覧
 
 | ツール | 説明 |
 |---|---|
-| `list_entities` | 保存済みレコード（monks / temples / amulets）の slug・名前・状態の一覧 |
+| `list_entities` | 保存済みレコード（monks / temples / amulets）の slug・名前・状態の一覧（`kind` 必須） |
 | `get_entity` | 1 件のレコードの Markdown 全文（frontmatter 含む） |
-| `save_entity` | レコードの作成・更新（Markdown 全文を渡す。slug 自動生成、自動コミット設定に従う） |
+| `save_entity` | レコードの作成・更新（Markdown 全文 `markdown` を渡す。slug 自動生成、自動コミット設定に従う） |
 | `entity_template` | 新規レコード用のテンプレート（frontmatter + 見出し） |
 | `list_sources` | 一次資料フォルダのファイル一覧 |
 | `search_sources` | 一次資料の全文検索（部分一致、タイ語・日本語・英語） |
@@ -312,23 +296,35 @@ agy mcp add phrapedia --url http://localhost:3000/mcp
 | `web_research` | Antigravity CLI / Gemini CLI で Web 調査（結果は **未確認** 扱い、キャッシュあり）。`images` に一次資料の画像パス、`ocrText` に読み取り済みの文字を渡すと、画像本体を CLI に添付して読み取り直し＋検索させる |
 | `sync_status` | データフォルダの Git 状態 |
 | `sync_data` | データフォルダをコミット → pull --rebase → push |
+| `update_draft` | アプリ内チャット専用の下書き更新（外部クライアントから呼んでも ack を返すだけ） |
 
-このほか、リソース `phrapedia://{kind}/{slug}`（レコード本文）と、プロンプト `research_record`（一次資料 → Web 調査 → 保存 の手順ガイド）を提供します。
+このほか、リソース `phrapedia://{kind}/{slug}`（レコード本文）と、プロンプト `research_record`（一次資料 → Web 調査 → 保存 の手順ガイド）を提供します。ツールの失敗は `isError: true` の結果で返ります。
 
 ## 開発コマンド
 
 ```bash
-npm run dev         # 開発サーバ（http://localhost:3000）
-npm run build       # 本番ビルド（.output/）
+npm ci
+npm run dev         # nuxt dev --port 1420（Tauri の devUrl。単体のブラウザでは Tauri command が無く機能しない）
+npm run generate    # SPA を .output-frontend に静的生成
 npm run typecheck   # nuxt typecheck
 npm test            # vitest（tests/**/*.test.ts）
-npm run smoke       # ビルド済みサーバを起動して REST / MCP の疎通確認（先に npm run build）
-npm start           # 本番サーバ起動（.env を読み込む）
-npm run tauri:dev   # デスクトップアプリを開発起動（npm run build → tauri dev。Rust ツールチェーンが必要）
+npm run tauri:dev   # デスクトップアプリを開発起動（Rust ツールチェーンが必要）
 npm run tauri:build # デスクトップアプリをビルド（src-tauri/target/release/bundle/ に出力）
+cd src-tauri && cargo check && cargo clippy --all-targets -- -D warnings && cargo test   # Rust 側
 ```
 
-`tauri:build` は `src-tauri/tauri.bundle.conf.json` を重ねて `.output/server` を同梱します。macOS 向けの配布物は GitHub Actions（下記）で作ります。
+`tauri:build` は `src-tauri/tauri.bundle.conf.json` を重ねてビルドします（`beforeBuildCommand` が `npm run generate`）。同梱するのは Rust バイナリと静的な画面だけで、Node は同梱しません。macOS 向けの配布物は GitHub Actions（下記）で作ります。
+
+実 `claude` でのチャット確認（手動。`claude` にログイン済みの環境で、`CLAUDECODE` 系の環境変数を外して実行）:
+
+```bash
+cd src-tauri && cargo build --bin phrapedia
+cargo run --example chat_smoke -- roundtrip /path/to/work   # 往復（tool 呼び出し・draft・done、ps に prompt/MCP 設定が出ないこと）
+cargo run --example chat_smoke -- abort /path/to/work       # 中断で子・孫プロセスが残らないこと
+cargo run --example chat_smoke -- resume /path/to/work      # --resume で文脈と最新下書きが反映されること
+```
+
+旧 Web 版の `start` / `start:render` / `build` / `preview` と `render.yaml` / `scripts/render-start.mjs` は残置です（[旧 Web 版について](#旧-web-版renderについて)）。
 
 ## リリース手順
 
@@ -346,7 +342,7 @@ scripts/release.sh --dry-run 0.1.1  # push・tag 以外を全部行う（確認�
 3. `package.json` / `package-lock.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` の version を揃えて 1 commit（`phrapedia <version>`）。各ファイルの変更行数が想定どおりかを確認してから commit する。
 4. 既定 branch と tag `v<version>` を push し、release workflow の完了を待つ。成功したら `gh release view` と tap の `Casks/phrapedia.rb` の version を表示し、一時 dir を消す。
 
-ビルドは GitHub Actions（`.github/workflows/release.yml`）が行い、ローカルでは `tauri build` しません。
+ビルドは GitHub Actions（`.github/workflows/release.yml`）が行い、ローカルでは `tauri build` しません。CI の node は `npm ci` / `npm run generate`（フロントの静的生成）と cask 更新スクリプトにだけ使い、配布物には含まれません。
 
 - macOS（aarch64 / x86_64）をビルドし、GitHub Release に `Phrapedia_<version>_{aarch64,x64}.dmg` を添付する。
 - 続く `cask` ジョブが dmg の sha256 を計算して `packaging/homebrew/update-cask.mjs` で cask に書き込み、`luangpho/homebrew-tap` の `Casks/phrapedia.rb` へ push する。リポジトリ secret `HOMEBREW_TAP_SSH_KEY`（推奨）か `HOMEBREW_TAP_TOKEN` のどちらかが必要で、両方無ければこのジョブはスキップされる（両方あれば SSH 鍵を優先）。`HOMEBREW_TAP_TOKEN` は設定済みで、fine-grained token への差し替えは不要。
@@ -355,7 +351,7 @@ scripts/release.sh --dry-run 0.1.1  # push・tag 以外を全部行う（確認�
 ### 更新方法
 
 - 利用者: `brew upgrade --cask phrapedia`。
-- アプリ内更新: サイドバー上部の更新アイコンから行う（アイコンはデスクトップ版で、更新用の署名鍵つきでビルドされた版にだけ出る。ブラウザ / Render には出ない。サイドバーを折りたたむとフッターに移る）。起動時と 6 時間ごとに黙って更新を確認し、あればアイコンにバッジが付き、tooltip に新しい版が出る（自動ダイアログは出ない）。アイコンを押すと、版と release notes を確認ダイアログに出し、了承すると download（進捗 % を表示）→ インストール → 再起動する。更新が無い状態で押すと、その場で確認して「最新です（現在 x.y.z）」と表示する。現在の版は通常時の tooltip に出る。失敗は通知で表示される。更新の確認・配布には署名鍵が使われる（下記）。
+- アプリ内更新: サイドバー上部の更新アイコンから行う（アイコンはデスクトップ版で、更新用の署名鍵つきでビルドされた版にだけ出る。ブラウザ単体では出ない。サイドバーを折りたたむとフッターに移る）。起動時と 6 時間ごとに黙って更新を確認し、あればアイコンにバッジが付き、tooltip に新しい版が出る（自動ダイアログは出ない）。アイコンを押すと、版と release notes を確認ダイアログに出し、了承すると download（進捗 % を表示）→ インストール → 再起動する。更新が無い状態で押すと、その場で確認して「最新です（現在 x.y.z）」と表示する。現在の版は通常時の tooltip に出る。失敗は通知で表示される。更新の確認・配布には署名鍵が使われる（下記）。
 - 権限不足で更新できない場合（Homebrew を別のユーザーで入れ、`/Applications/Phrapedia.app` の所有者が今のユーザーと違う時）は、Homebrew を入れたユーザーで `brew upgrade --cask phrapedia` を実行する。
 
 ### アプリ内更新（tauri updater）の鍵
@@ -409,14 +405,15 @@ node packaging/homebrew/update-cask.mjs --version 0.1.0 \
 | **CLI が見つからない**（`CLI not found`） | `agy --version` が通るか確認（インストール: `curl -fsSL https://antigravity.google/cli/install.sh \| bash`）。PATH が通らない環境（サービス起動など）では 設定 →「コマンド」に絶対パス（`which agy` の結果、通常 `~/.local/bin/agy`）を入れる |
 | `agy` が終了コード 1 で失敗 | 未ログインの可能性。ターミナルで一度 `agy` を起動して Google にサインインするか、`GEMINI_API_KEY` ＋ `~/.gemini/antigravity-cli/settings.json` の `"modelProvider": "gemini"` を設定 |
 | `agy` が終了コード 3 | モデル／エージェント側のエラー、または `--print-timeout` による打ち切り。部分的な応答があればそのまま使われる |
-| 旧 Gemini CLI が認証エラー（終了コード 41） | `GEMINI_API_KEY` を `.env` かシェルに設定するか、ターミナルで一度 `gemini` を起動してログイン |
+| 旧 Gemini CLI が認証エラー（終了コード 41） | `GEMINI_API_KEY` をアプリの起動環境の環境変数に設定するか、ターミナルで一度 `gemini` を起動してログイン |
 | **Web 調査がタイムアウト** | 設定 →「タイムアウト」を延ばす（例: 300000）。モデルを `flash` にすると速くなる。同じ質問はキャッシュされる |
 | **チャットが「Claude Code CLI（claude）が見つかりません」** | `claude --version` が通るか確認。PATH が通らない環境（Finder 起動のデスクトップアプリ、サービス起動）では 設定 →「AI」→「コマンド」に絶対パス（`which claude` の結果、通常 `~/.local/bin/claude`）を入れる。チャットは Claude 専用で Gemini では代替できません |
 | チャットが「ログインしていないようです」 | ターミナルで `claude` を一度起動してログイン（Pro / Max など）。別マシンでは各マシンでログインが必要 |
-| **PGlite のエラー / 起動しない** | `.phrapedia/` は消しても再生成されます（設定・チャット履歴・キャッシュは失われ、レコードと一次資料は無事）。同じ `.phrapedia/` を 2 つのサーバで同時に開くと壊れることがあるので、開発サーバと本番サーバを同時に起動しない（どうしても必要なら `NUXT_STATE_DIR` を分ける） |
+| 検索が壊れた / 履歴が変 / 旧データが見えない | `<app data dir>/state/phrapedia.sqlite`（と `-wal` / `-shm`）を消すと再生成されます（失われるのは履歴・検索インデックス・調査キャッシュだけで、レコードと一次資料は無事）。旧版の PGlite（`.phrapedia/`）のチャット履歴は移行されません |
+| 画面に「データセットパスが使えません」「書き出し先パスが使えません」 | 設定画面のパスを確認（絶対パス・存在・ディレクトリ・書き込み権限）。直すまでレコード・一次資料・Git は使えません |
 | 一次資料が検索に出ない | パス（設定 → 一次資料フォルダ）を確認。`.` で始まるフォルダは対象外。PDF は本文検索非対応 |
 | 同期でエラー | ターミナルで `git status` / `git pull --rebase` を実行して状態を確認。リモートの認証（SSH 鍵 / トークン）を確認 |
-| MCP クライアントが繋がらない | アプリ（`npm run dev`）が起動しているか、ポートが 3000 か確認。ブラウザで `/mcp` を開くとトップへリダイレクトされるのは正常 |
+| MCP クライアントが繋がらない | HTTP の `/mcp` は廃止済みです。stdio の `phrapedia mcp` を `--config-dir` / `--data-dir` 付きで起動する設定にしているか、バイナリのパスが正しいか確認（[MCP で使う](#mcp-で使う)）。標準出力は MCP 専用なのでログは標準エラーに出ます |
 
 ## ロードマップ
 

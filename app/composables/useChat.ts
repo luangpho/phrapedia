@@ -1,46 +1,12 @@
 import type { MaybeRefOrGetter, Ref } from 'vue'
-import type { ChatMessage, ChatPart, ChatSession, ChatStreamEvent, EntityKind } from '#shared/types'
+import type { ChatMessage, ChatPart, ChatStreamEvent, EntityKind } from '#shared/types'
+import type { ChatStreamHandle } from '~/utils/api'
 
 export type ChatPanelStatus = 'ready' | 'submitted' | 'streaming' | 'error'
 
 /* ------------------------------------------------------------------------------------------------
  * Pure helpers (no Vue / Nuxt dependencies — unit-testable in plain Node)
  * ---------------------------------------------------------------------------------------------- */
-
-/**
- * Incremental Server-Sent Events parser. Feed decoded text chunks; returns the `data` payloads of every
- * complete event (frames are separated by a blank line; multi-line data is joined with "\n").
- */
-export function createSseParser() {
-  let buffer = ''
-  function frames(text: string): string[] {
-    const out: string[] = []
-    for (const frame of text.split(/\r?\n\r?\n/)) {
-      const data: string[] = []
-      for (const line of frame.split(/\r?\n/)) {
-        if (line.startsWith('data:')) data.push(line.slice(line.charAt(5) === ' ' ? 6 : 5))
-      }
-      if (data.length) out.push(data.join('\n'))
-    }
-    return out
-  }
-  return {
-    push(chunk: string): string[] {
-      buffer += chunk
-      const idx = Math.max(buffer.lastIndexOf('\n\n'), buffer.lastIndexOf('\r\n\r\n'))
-      if (idx < 0) return []
-      const complete = buffer.slice(0, idx)
-      buffer = buffer.slice(idx).replace(/^(\r?\n)+/, '')
-      return frames(complete)
-    },
-    /** Flush whatever is left when the stream ends (a final frame without trailing blank line). */
-    flush(): string[] {
-      const rest = buffer
-      buffer = ''
-      return rest.trim() ? frames(rest) : []
-    },
-  }
-}
 
 /**
  * Apply one stream event to the (in-progress) assistant message. Mutates `message.parts` in place.
@@ -166,7 +132,7 @@ export async function bindDraftChatSession(kind: EntityKind, slug: string): Prom
   const id = readStored(key)
   if (!id) return
   try {
-    await $fetch(`/api/chat/sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: { slug } })
+    await api.patchChatSession(id, { slug })
   } catch {
     // the session may already be gone; nothing to bind
   }
@@ -191,15 +157,6 @@ function writeStored(key: string, value: string | null) {
   }
 }
 
-async function errorMessageFromResponse(res: Response): Promise<string> {
-  try {
-    const data = await res.json() as { message?: string; statusMessage?: string }
-    return data.message || data.statusMessage || `HTTP ${res.status}`
-  } catch {
-    return `HTTP ${res.status} ${res.statusText}`
-  }
-}
-
 export function useChat(options: UseChatOptions) {
   const messages = ref<ChatMessage[]>([])
   const status = ref<ChatPanelStatus>('ready')
@@ -210,7 +167,8 @@ export function useChat(options: UseChatOptions) {
   const streamingId = ref<string | undefined>()
   const lastUserText = ref<string | null>(null)
   const toast = useToast()
-  let controller: AbortController | null = null
+  /** The turn in progress (null when idle). `cancelled` = abandoned (reset / switch / unmount): late events are ignored. */
+  let turn: { id: string; handle: ChatStreamHandle | null; cancelled: boolean; stopped: boolean } | null = null
   let loadToken = 0
 
   const draftValue = () => (typeof options.draft === 'function' ? options.draft() : options.draft.value) ?? ''
@@ -251,84 +209,85 @@ export function useChat(options: UseChatOptions) {
     status.value = 'submitted'
     streamingId.value = assistant.id
 
-    controller = new AbortController()
-    const signal = controller.signal
+    const current = { id: localId(), handle: null as ChatStreamHandle | null, cancelled: false, stopped: false }
+    turn = current
     let gotTerminal = false
+    const handle = (ev: ChatStreamEvent) => {
+      if (current.cancelled) return
+      if (ev.type === 'session') {
+        rememberSession(ev.sessionId)
+        user.id = ev.userMessageId
+        assistant.id = ev.assistantMessageId
+        streamingId.value = ev.assistantMessageId
+        return
+      }
+      if (ev.type === 'text-delta' || ev.type === 'tool-start' || ev.type === 'draft') {
+        if (status.value === 'submitted') status.value = 'streaming'
+      }
+      const r = applyChatStreamEvent(assistant, ev)
+      if (r.draft) options.onDraft?.(r.draft.markdown, r.draft.summary)
+      if (r.saved) options.onSaved?.(r.saved)
+      if (r.error) {
+        gotTerminal = true
+        fail(r.error)
+      }
+      if (r.final) {
+        gotTerminal = true
+        if (r.final.parts.length) assistant.parts = r.final.parts
+        assistant.id = r.final.id
+        if (status.value !== 'error') status.value = 'ready'
+      }
+    }
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'accept': 'text/event-stream' },
-        body: JSON.stringify({
-          sessionId: sessionId.value ?? undefined,
-          kind: toValue(options.kind),
-          slug: toValue(options.slug),
-          message: content,
-          draft: draftValue(),
-        }),
-        signal,
-      })
-      if (!res.ok || !res.body) throw new Error(await errorMessageFromResponse(res))
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      const parser = createSseParser()
-      const handle = (payload: string) => {
-        let ev: ChatStreamEvent
-        try {
-          ev = JSON.parse(payload) as ChatStreamEvent
-        } catch {
-          return
-        }
-        if (ev.type === 'session') {
-          rememberSession(ev.sessionId)
-          user.id = ev.userMessageId
-          assistant.id = ev.assistantMessageId
-          streamingId.value = ev.assistantMessageId
-          return
-        }
-        if (ev.type === 'text-delta' || ev.type === 'tool-start' || ev.type === 'draft') {
-          if (status.value === 'submitted') status.value = 'streaming'
-        }
-        const r = applyChatStreamEvent(assistant, ev)
-        if (r.draft) options.onDraft?.(r.draft.markdown, r.draft.summary)
-        if (r.saved) options.onSaved?.(r.saved)
-        if (r.error) {
-          gotTerminal = true
-          fail(r.error)
-        }
-        if (r.final) {
-          gotTerminal = true
-          if (r.final.parts.length) assistant.parts = r.final.parts
-          assistant.id = r.final.id
-          if (status.value !== 'error') status.value = 'ready'
-        }
-      }
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        for (const payload of parser.push(decoder.decode(value, { stream: true }))) handle(payload)
-      }
-      for (const payload of parser.flush()) handle(payload)
-      if (!gotTerminal && (status.value as ChatPanelStatus) !== 'error') status.value = 'ready'
-    } catch (err) {
-      if (signal.aborted) {
+      current.handle = chatSend({
+        turnId: current.id,
+        sessionId: sessionId.value ?? undefined,
+        kind: toValue(options.kind),
+        slug: toValue(options.slug),
+        message: content,
+        draft: draftValue(),
+      }, handle)
+      await current.handle.done
+      if (current.cancelled) {
+        // abandoned (reset / switch / unmount): the caller already reset the state
+        finishRunningTools(assistant)
+      } else if (current.stopped) {
         finishRunningTools(assistant)
         if (!assistant.parts.length) assistant.parts.push({ type: 'text', text: '（停止しました）' })
+        if ((status.value as ChatPanelStatus) !== 'error') status.value = 'ready'
+      } else if (!gotTerminal && (status.value as ChatPanelStatus) !== 'error') {
         status.value = 'ready'
-      } else {
-        finishRunningTools(assistant)
-        fail((err as Error)?.message || 'AI アシスタントとの通信に失敗しました。')
+      }
+    } catch (err) {
+      finishRunningTools(assistant)
+      if (!current.cancelled) {
+        fail(errorMessage(err, 'AI アシスタントとの通信に失敗しました。'))
       }
     } finally {
-      controller = null
-      streamingId.value = undefined
+      if (turn === current) {
+        turn = null
+        streamingId.value = undefined
+      }
       // drop an empty assistant bubble (e.g. request rejected before streaming)
       if (!assistant.parts.length) messages.value = messages.value.filter(m => m !== assistant)
     }
   }
 
+  /** Ask the backend to end the turn in progress. `discard` = abandon it (late events are ignored). */
+  function abortTurn(discard: boolean) {
+    const t = turn
+    if (!t) return
+    if (discard) {
+      t.cancelled = true
+      t.handle?.detach()
+    } else {
+      t.stopped = true
+    }
+    void api.chatAbort(t.id).catch(() => {})
+  }
+
   function stop() {
-    controller?.abort()
+    abortTurn(false)
   }
 
   /** Re-send the last user message (after an error). */
@@ -342,10 +301,7 @@ export function useChat(options: UseChatOptions) {
       const dropped = messages.value.slice(idx)
       messages.value = messages.value.slice(0, idx)
       if (sessionId.value) {
-        await $fetch(`/api/chat/sessions/${encodeURIComponent(sessionId.value)}/messages`, {
-          method: 'DELETE',
-          body: { ids: dropped.map(m => m.id) },
-        }).catch(() => {})
+        await api.deleteChatMessages(sessionId.value, dropped.map(m => m.id)).catch(() => {})
       }
     }
     status.value = 'ready'
@@ -353,7 +309,7 @@ export function useChat(options: UseChatOptions) {
   }
 
   function reset() {
-    controller?.abort()
+    abortTurn(true)
     loadToken++
     messages.value = []
     error.value = null
@@ -363,7 +319,7 @@ export function useChat(options: UseChatOptions) {
   }
 
   async function loadSession(id: string, token: number) {
-    const data = await $fetch<{ session: ChatSession; messages: ChatMessage[] }>(`/api/chat/sessions/${encodeURIComponent(id)}`)
+    const data = await api.getChatSession(id)
     if (token !== loadToken) return
     sessionId.value = data.session.id
     messages.value = data.messages
@@ -389,7 +345,7 @@ export function useChat(options: UseChatOptions) {
         }
         return
       }
-      const sessions = await $fetch<ChatSession[]>('/api/chat/sessions', { query: { kind, slug } })
+      const sessions = await api.listChatSessions(kind, slug)
       if (token !== loadToken) return
       const newest = sessions[0]
       if (newest) await loadSession(newest.id, token)
@@ -399,8 +355,7 @@ export function useChat(options: UseChatOptions) {
       }
     } catch (err) {
       if (token !== loadToken) return
-      const e = err as { data?: { message?: string }; message?: string }
-      error.value = `会話履歴を読み込めませんでした: ${e?.data?.message || e?.message || ''}`
+      error.value = `会話履歴を読み込めませんでした: ${errorMessage(err, '')}`
     } finally {
       if (token === loadToken) loading.value = false
     }
@@ -414,10 +369,10 @@ export function useChat(options: UseChatOptions) {
       if (kind === prevKind && prevSlug === null && slug && sessionId.value) {
         const id = sessionId.value
         writeStored(draftStorageKey(kind), null)
-        await $fetch(`/api/chat/sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: { slug } }).catch(() => {})
+        await api.patchChatSession(id, { slug }).catch(() => {})
         return
       }
-      controller?.abort()
+      abortTurn(true)
       messages.value = []
       sessionId.value = null
       status.value = 'ready'
@@ -429,7 +384,7 @@ export function useChat(options: UseChatOptions) {
     onMounted(() => {
       void loadLatestSession()
     })
-    onBeforeUnmount(() => controller?.abort())
+    onBeforeUnmount(() => abortTurn(true))
   }
 
   const uiMessages = computed(() => chatToUiMessages(messages.value, { streamingId: streamingId.value }))

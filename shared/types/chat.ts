@@ -34,8 +34,10 @@ export interface ChatSession {
   updatedAt: string
 }
 
-/** Request body of POST /api/chat */
+/** Request of the `chat_send` command */
 export interface ChatRequest {
+  /** Client-generated UUID; the key of `chat_abort` (the first turn has no sessionId yet) */
+  turnId: string
   sessionId?: string
   kind: EntityKind
   slug?: string | null
@@ -45,7 +47,7 @@ export interface ChatRequest {
   draft: string
 }
 
-/** Events streamed back by POST /api/chat as Server-Sent Events (`data: <json>`) */
+/** Events streamed back by `chat_send` through the Tauri Channel */
 export type ChatStreamEvent =
   | { type: 'session'; sessionId: string; userMessageId: string; assistantMessageId: string }
   | { type: 'text-delta'; delta: string }

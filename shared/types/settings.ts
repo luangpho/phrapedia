@@ -79,7 +79,10 @@ export interface SettingsView extends AppSettings {
   resolved: {
     sourcesDir: string
     dataDir: string
-    projectRoot: string
+    /** Dataset root (read source; holds data/<kind>/ and sources/) */
+    datasetRoot: string
+    /** Export root (write target; the git sync scope) */
+    exportRoot: string
   }
   capabilities: {
     /** `claude --version` ran successfully */

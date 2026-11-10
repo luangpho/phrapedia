@@ -24,9 +24,8 @@ export function statusMeta(status: string | undefined) {
   return STATUS_META[(status as EntityStatus) ?? 'draft'] ?? STATUS_META.draft
 }
 
-/** Extract a human readable message from a $fetch / useFetch error. */
+/** Extract a human readable message from an API layer / useAsyncData error. */
 export function errorMessage(err: unknown, fallback = 'エラーが発生しました'): string {
   if (!err) return fallback
-  const e = err as { data?: { message?: string; statusMessage?: string }; statusMessage?: string; message?: string }
-  return e.data?.message || e.data?.statusMessage || e.statusMessage || e.message || fallback
+  return appErrorMessage(err, fallback)
 }

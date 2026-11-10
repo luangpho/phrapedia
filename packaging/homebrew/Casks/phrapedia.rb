@@ -12,8 +12,6 @@ cask "phrapedia" do
 
   auto_updates true
 
-  depends_on formula: "node"
-
   app "Phrapedia.app"
 
   preflight_steps do

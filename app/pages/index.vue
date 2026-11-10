@@ -4,14 +4,19 @@ useHead({ title: 'Phrapedia' })
 const monks = useEntityList('monks')
 const temples = useEntityList('temples')
 
-const cards = computed(() => [
-  { kind: 'monks' as const, list: monks },
-  { kind: 'temples' as const, list: temples },
-])
+const { info, isDesktop } = useDesktop()
 
-const requestUrl = useRequestURL()
-const mcpUrl = computed(() => `${requestUrl.origin}/mcp`)
-const mcpJson = computed(() => JSON.stringify({ mcpServers: { phrapedia: { httpUrl: mcpUrl.value } } }, null, 2))
+// External MCP clients (Claude Code etc.) run the same binary as a stdio server: `phrapedia mcp`.
+const mcpJson = computed(() => JSON.stringify({
+  mcpServers: {
+    phrapedia: {
+      type: 'stdio',
+      command: info.value?.exePath ?? '',
+      args: ['mcp', '--config-dir', info.value?.configDir ?? '', '--data-dir', info.value?.dataDir ?? ''],
+    },
+  },
+}, null, 2))
+const showMcp = computed(() => isDesktop.value && !!info.value?.exePath)
 
 const toast = useToast()
 async function copyMcp() {
@@ -22,6 +27,11 @@ async function copyMcp() {
     toast.add({ title: 'コピーできませんでした', color: 'error', icon: 'i-lucide-circle-alert' })
   }
 }
+
+const cards = computed(() => [
+  { kind: 'monks' as const, list: monks },
+  { kind: 'temples' as const, list: temples },
+])
 </script>
 
 <template>
@@ -67,18 +77,20 @@ async function copyMcp() {
           </ol>
         </section>
 
-        <section class="space-y-3">
+        <section v-if="showMcp" class="space-y-3">
           <div class="flex items-center justify-between gap-2">
             <h3 class="text-sm font-semibold text-highlighted flex items-center gap-1.5">
-              <UIcon name="i-lucide-plug" class="size-4" />MCP エンドポイント
+              <UIcon name="i-lucide-plug" class="size-4" />MCP サーバー（stdio）
             </h3>
             <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" label="設定をコピー" @click="copyMcp" />
           </div>
           <p class="text-sm text-muted leading-6">
-            Claude Code や Antigravity CLI から <code class="font-mono text-xs text-highlighted">{{ mcpUrl }}</code> に接続すると、
-            同じデータを MCP ツール（検索・取得・保存・一次資料・Web 調査・同期）で扱えます。
+            Claude Code や Antigravity CLI の MCP 設定に次を加えると、このアプリと同じデータを MCP ツール（検索・取得・保存・一次資料・Web 調査・同期）で扱えます。アプリ本体を stdio サーバーとして起動します。
           </p>
           <pre class="rounded-md border border-default bg-elevated/50 p-3 text-xs font-mono overflow-x-auto">{{ mcpJson }}</pre>
+        </section>
+
+        <section class="space-y-3">
           <p class="text-sm text-muted">
             一次資料フォルダや AI プロバイダは <ULink to="/settings" class="text-primary hover:underline">設定</ULink> で変更できます。
             資料の一覧は <ULink to="/sources" class="text-primary hover:underline">一次資料</ULink> から確認できます。

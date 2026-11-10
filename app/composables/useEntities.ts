@@ -1,9 +1,4 @@
-import type { EntityKind, EntityRecord, EntitySummary } from '#shared/types'
-
-export interface SaveEntityResult {
-  record: EntityRecord
-  commit?: unknown
-}
+import type { EntityKind, EntitySummary } from '#shared/types'
 
 export const entityListKey = (kind: EntityKind) => `entities:${kind}`
 export const entityKey = (kind: EntityKind, slug: string) => `entity:${kind}:${slug}`
@@ -14,10 +9,10 @@ export const entityKey = (kind: EntityKind, slug: string) => `entity:${kind}:${s
  * `refreshList(kind)` updates all of them (e.g. the sidebar after save/delete).
  */
 export function useEntityList(kind: MaybeRefOrGetter<EntityKind>) {
-  return useFetch<EntitySummary[]>(() => `/api/entities/${toValue(kind)}`, {
-    key: computed(() => entityListKey(toValue(kind))),
+  return useAsyncData<EntitySummary[]>(() => entityListKey(toValue(kind)), () => api.listEntities(toValue(kind)), {
     default: () => [],
     dedupe: 'defer',
+    watch: [() => toValue(kind)],
   })
 }
 
@@ -28,31 +23,30 @@ export function useEntities() {
   }
 
   function get(kind: EntityKind, slug: string) {
-    return $fetch<EntityRecord>(`/api/entities/${kind}/${encodeURIComponent(slug)}`)
+    return api.getEntity(kind, slug)
   }
 
   async function create(kind: EntityKind, raw: string, message?: string) {
-    const res = await $fetch<SaveEntityResult>(`/api/entities/${kind}`, { method: 'POST', body: { raw, message } })
+    const res = await api.createEntity(kind, raw, message)
     await refreshList(kind)
     return res
   }
 
   async function update(kind: EntityKind, slug: string, raw: string, message?: string) {
-    const res = await $fetch<SaveEntityResult>(`/api/entities/${kind}/${encodeURIComponent(slug)}`, { method: 'PUT', body: { raw, message } })
+    const res = await api.updateEntity(kind, slug, raw, message)
     await refreshList(kind)
     return res
   }
 
   async function remove(kind: EntityKind, slug: string) {
-    const res = await $fetch<{ ok: boolean; commit?: unknown }>(`/api/entities/${kind}/${encodeURIComponent(slug)}`, { method: 'DELETE' })
+    const res = await api.deleteEntity(kind, slug)
     clearNuxtData(entityKey(kind, slug))
     await refreshList(kind)
     return res
   }
 
   async function template(kind: EntityKind, name = '') {
-    const res = await $fetch<{ raw: string }>(`/api/entities/${kind}/template`, { query: name ? { name } : undefined })
-    return res.raw
+    return await api.entityTemplate(kind, name)
   }
 
   return { refreshList, get, create, update, remove, template }
